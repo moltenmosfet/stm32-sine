@@ -259,7 +259,7 @@ s32fp PwmGeneration::ProcessCurrents()
    {
       Param::SetFixed(Param::il1rms, rms);
 
-      if (opmode != MOD_BOOST || opmode != MOD_BUCK)
+      if (opmode != MOD_BOOST && opmode != MOD_BUCK)
       {
          //rough approximation as we do not take power factor into account
          s32fp idc = (SineCore::GetAmp() * rms) / SineCore::MAXAMP;
