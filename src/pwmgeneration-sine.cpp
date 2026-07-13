@@ -212,7 +212,7 @@ s32fp PwmGeneration::GetIlMax(s32fp il1, s32fp il2)
 PwmGeneration::EdgeType PwmGeneration::CalcRms(s32fp il, EdgeType& lastEdge, s32fp& max, s32fp& rms, int& samples, s32fp prevRms)
 {
    const s32fp oneOverSqrt2 = FP_FROMFLT(0.707106781187);
-   int minSamples = pwmfrq / (4 * FP_TOINT(frq));
+   int minSamples = pwmfrq / (4 * MAX(1, FP_TOINT(frq)));
    EdgeType edgeType = NoEdge;
 
    minSamples = MAX(10, minSamples);
