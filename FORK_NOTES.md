@@ -1,9 +1,9 @@
 # Fork notes — moltenmosfet/stm32-sine (dyno absorber)
 
-This is the Molten MOSFET dyno fork of Open Inverter's `stm32-sine`, driving the
-EM57 absorber (decision record Rev 5, 12 Jul 2026). Work orders and rationale live in
-`software/stm32-sine_fork_worklist_v1.md`; the findings canon is
-`software/stm32-sine_FOC_review_v1.md` (F-numbers).
+This is the Molten MOSFET dyno fork of Open Inverter's `stm32-sine`, driving a
+Nissan Leaf EM57 motor as the absorber on a chassis dynamometer. Rationale for
+individual changes is in the per-task rows below; deeper design rationale that
+isn't captured here lives in internal review notes (not part of this repo).
 
 ## Two repos, two forks
 
@@ -29,7 +29,46 @@ a superproject branch reference a libopeninv SHA that isn't pushed to the fork.
 `origin` stays pointed at upstream in both repos. `[UPSTREAM]` tasks become clean
 branches off *current* upstream master at submission time (rebase then; develop against
 the pin now). `[FORK]` tasks encode dyno policy and stay on the fork. Never push to
-`origin` (jsphuebner) — forks only. PR sequence: see the worklist's "Upstream PR series".
+`origin` (jsphuebner) — forks only.
+
+PR sequence: tasks marked UPSTREAM in the table below (T2, T3, T6's race-condition half,
+T8, T9, T10, T11, T12, T15, T16, T17, T18, T19) are submitted as separate PRs, library-level
+fixes in libopeninv going out before the superproject fixes that depend on them. Tasks
+marked FORK (T1, T4, T5, T6's taper half, T7, T13, T14, T20) stay on the fork; T5
+(deadtime compensation) may be offered upstream once bench-validated.
+
+## Findings glossary
+
+Each finding below (F1–F24) came out of a source-level review of the FOC control path,
+the CAN/SDO stack, the scheduler, and the SINE build. Task rows in the table further
+down reference these numbers.
+
+| # | What the defect is |
+|---|---|
+| F1 | Below about 450 rpm, the q-axis voltage clamp only allows one polarity, switched instantly with no hysteresis or ramp — kills braking/regen at low speed and spikes current at the threshold. |
+| F2 | The PI controller's integral term updates in coarse steps (~1.7% of full modulation) at default gains because an integer division truncates before scaling — causes a low-torque limit cycle. |
+| F3 | Phase-current sampling free-runs unsynchronized to the PWM switching, so samples land at random points on the current ripple, adding noise that's significant at partial load. |
+| F4 | Below about 42 rpm the frequency estimate is forced to zero and the last direction stays latched — regen torque cuts on/off abruptly and direction can flap during near-standstill oscillation. |
+| F5 | The anti-cogging feedforward (off by default) has a 16-bit angle wraparound glitch and an unfiltered amplitude estimate that can self-reinforce; only matters if the feature is turned on. |
+| F6 | Lowering the modulation-limit parameter while the motor is running can make an internal limit calculation go negative under unsigned arithmetic, producing a bogus limit and an overmodulation spike. |
+| F7 | An unused variant of the PI controller (present in the shared library, not used by this firmware) truncates its output to an integer — would quantize control for any other firmware built on the same library. |
+| F8 | Reviewed and cleared: several suspected issues (double application of a timing-advance term, anti-windup interaction with dynamic clamps, overflow risk in voltage math, short-pulse suppression) turned out not to be bugs. |
+| F9 | Configuration traps for this motor: pole-pair ratio must be an integer, an MTPA gain is off by default on a salient machine, the regen voltage taper must sit above the resistor-dump voltage, overcurrent thresholds are averaged across both current sensors, and the manual torque test parameters bypass throttle-path safety derates. |
+| F10 | Switching dead-time is never compensated in the modulation, producing a voltage error large enough to distort control at low torque and low current. |
+| F11 | CAN commands to reload saved parameters or restore defaults aren't blocked while the motor is running — a remote command mid-run can switch encoder mode and scramble the control loop. A separate remote-start path also skips the contactor-close interlock. |
+| F12 | Three bugs in the CAN receive filter setup: a leftover-filter flush uses the wrong index (silently drops an extended-ID filter), mask banks are checked against the wrong per-bank count (wastes half of every mask bank), and an incompletely filled bank accidentally accepts CAN ID 0. |
+| F13 | A counter shared between the fast PWM interrupt and the slower frequency-update interrupt can be read and cleared non-atomically, occasionally losing an angle increment and undercounting frequency. |
+| F14 | Writing most parameters over CAN triggers a full reconfiguration routine inside the CAN receive interrupt, adding tens of microseconds of latency per write — noticeable for high-rate commands like a torque setpoint. |
+| F15 | If a scheduled task overruns its period, the 16-bit hardware timer compare can end up behind the counter, and the task then silently stalls for up to roughly 650 ms before it fires again. |
+| F16 | Minor items grouped together: a fixed-point filter with a small negative rounding bias, one filter's state shared by two callers running it at twice the intended rate, an ADC-channel-count off-by-one on one hardware variant, a self-correcting startup transient in a cogging estimate, missing length checks on incoming CAN SDO frames, and a start interlock that doesn't count a regen (negative) command as "throttle pressed." |
+| F17 | A 2023 fix for current-magnitude overflow above ~1000 A was added to the math library but never wired into the function it was meant to fix — the overflow is still present. |
+| F18 | The terminal "defaults" command resets parameter values in memory but never triggers the recalculation that applies them, so the reset has no effect until an unrelated parameter write happens to trigger it. |
+| F19 | The terminal "start" command runs a fixed-point conversion on a plain integer, shifting most mode values down to "off" — the command silently does nothing for most inputs. |
+| F20 | An RMS calculation divides by a value derived from frequency with no floor, dividing by zero below 1 Hz stator frequency. |
+| F21 | A logic condition in sine-wave current processing uses OR where AND was intended, making it always true; currently harmless because that code path isn't reached in the affected mode. |
+| F22 | Angle interpolation between pulses on single-channel encoders isn't clamped, so it can overshoot past the next real pulse and then snap back — a sawtooth in the synthesized angle. |
+| F23 | A regen safety guard meant to block driving in the wrong direction compares a value against itself in single-channel encoder mode, so it can never trigger — looks like protection, does nothing. |
+| F24 | Documentation/config traps for all users: a negative overcurrent-limit parameter silently inverts the trip thresholds on non-Prius hardware instead of disabling the limit; the deadtime parameter is a nonlinear hardware register code, not a linear time value; two output modes stay nominally enabled in the FOC build without actually driving anything; and current-limiting has undocumented floors below which it can't act. |
 
 ## Applied tasks
 
@@ -44,8 +83,8 @@ so all firmware-only changes are now compile-checked).
 | T1 | — | superproject | host suite | done — picontroller/foc under test, libopencm3 stubs |
 | T2 | UPSTREAM | libopeninv (+super bump) | host tests (3) + FOC/SINE build | done — F2/F7 |
 | T3 | UPSTREAM | libopeninv + superproject | host test + FOC build | done — F6 (GetQLimit host-tested; UpdateVoltageLimits firmware-built) |
-| T7 | FORK | superproject | FOC/SINE build + host | done — F14 (guarded #if CTRL_FOC) |
-| T8 | UPSTREAM | libopeninv (+super bump) | review + FOC build | done — F11 (review-verified per worklist; harness not cheap) |
+| T7 | FORK | superproject | FOC/SINE build + host | done — F14 (guarded #if CTRL_FOC; fast-paths `manualid`/`manualiq` so CAN torque commands skip the reconfig cost) |
+| T8 | UPSTREAM | libopeninv (+super bump) | review + FOC build | done — F11 (review-verified; an automated test harness for this path wasn't cost-effective) |
 | T15 | UPSTREAM | superproject | host test + SINE/FOC build | done — F17 |
 | T17 | UPSTREAM | superproject | FOC/SINE build + host | done — F19/F20/F21 (3 commits) |
 | T4 | FORK | superproject | host tests (7) + FOC/SINE build | done — F1 (QClamp policy class, `qlimfrq` param id 165, 0 = dyno mode / restriction off; shrinking qlimit clamps instantly; dead QLIMIT_FREQUENCY macro removed) |
@@ -56,12 +95,13 @@ so all firmware-only changes are now compile-checked).
 | T19 | UPSTREAM | superproject | review + FOC/SINE build | done — F24 (ocurlim ABS guard; deadtime DTG nonlinearity documented as comment — PARAM_ENTRY has no description field) |
 | T9 | UPSTREAM | libopeninv (+super tests/bump) | host tests (4-combo matrix, exercises production code) + FOC/SINE build | done — F12 (all 3 defects fixed; pure packing logic split to canfilterpack.cpp so host tests drive real code — PR 5 may inline the split back if upstream prefers) |
 | T10 | UPSTREAM | libopeninv (+super tests/bump) | host tests (4: normal, 1.5-period overrun, both wrap directions) + FOC/SINE build | done — F15 (missed deadline resyncs `TIM_CCR = counter + period` via `CheckOverrun`, a pure static split out for host testability — T9 precedent, raw TIM_CCR MMIO isn't host-drivable; overrun counter readable via `GetOverrunCount()`, no param) |
-| T12 | UPSTREAM | both | host test (throttle IIR state isolation) + FOC/SINE build; items 2–4 review-verified | done — F16, 4 commits: throttle IIR state per caller (`FrequencyLimitCommandFw`, shared `RunFrequencyLimit` helper); `bmwAdcNextChan` wraps at `maxChan-1`; SDO frames DLC<8 rejected (libopeninv); cogging sentinels init 0 (first-crossing artifact; post-crossing resets keep ±INT32_MAX — a sample always lands between crossings). IIRFILTER rounding bias skipped per worklist |
+| T12 | UPSTREAM | both | host test (throttle IIR state isolation) + FOC/SINE build; items 2–4 review-verified | done — F16, 4 commits: throttle IIR state per caller (`FrequencyLimitCommandFw`, shared `RunFrequencyLimit` helper); `bmwAdcNextChan` wraps at `maxChan-1`; SDO frames DLC<8 rejected (libopeninv); cogging sentinels init 0 (first-crossing artifact; post-crossing resets keep ±INT32_MAX — a sample always lands between crossings). IIRFILTER rounding bias left unfixed — a metrology-polish item, not this pass's priority |
 | T16 | UPSTREAM | both | review + host regression + FOC/SINE build (terminal glue, no host harness) | done — F18: terminal `defaults` now calls `Param::Change(PARAM_LAST)` (mirrors SDO path) and both `defaults` (super) and `load` (libopeninv) gate on `saveEnabled` via new `IsSaveEnabled()` accessor; messages match the `save` gate pattern |
 | T13 | FORK (doc) | superproject | design doc only, no code | done — F3: `doc_sync_sampling_design.md`. Recommends TIM1_CC4 (JEXTSEL=1) injected trigger, Option A time-share (PWM ISR reads currents → hands injected group to resolver; JEOC ISR reads sin/cos → hands back) first, Option B (TIM1-locked excitation, single 2-deep sequence) as end-state. `syncadv`/`syncofs` re-tune required after A. Implementation gated on doc review |
-| T14 | FORK (doc) | n/a (lives in `software/`) | doc only; params cross-checked vs `param_prj.h` on dyno-main | done — `software/EM57_openinverter_param_baseline_v1.md` (workspace repo). Headline: `respolepairs=4 [VERIFY]` is the #1 first-spin trap (default 1 → 4× angle); `qlimfrq=0` + supervisory re-own of ALL throttle derates (F9) = the dyno mode; bus ladder 300/320/‹350 OBC›/‹360–375 dump›/385/430/‹450 HW›; `ocurlim`/`fmax`/ladder final values gate on HV power-stage selection |
+| T14 | FORK (doc) | n/a | doc only; params cross-checked vs `param_prj.h` on dyno-main | done — parameter baseline for the EM57 build, written up as an internal doc (not part of this repo). Headline: `respolepairs=4 [VERIFY]` is the #1 first-spin trap (default 1 → 4× angle); `qlimfrq=0` + supervisory re-own of ALL throttle derates (F9) = the dyno mode; bus ladder 300/320/‹350 OBC›/‹360–375 dump›/385/430/‹450 HW›; `ocurlim`/`fmax`/ladder final values gate on HV power-stage selection |
+| T20 | FORK (doc) | both | doc only, no code | done — public-facing README banners in both repos (this fork's purpose, the dyno-main/pin scheme, and the bench-validation disclosure) plus this rewrite of FORK_NOTES.md for outside readers |
 
 Baseline pins → current `dyno-main` tips: superproject `1dfab85 → dyno-main`,
-libopeninv `78e3f72 → 1114748`.
+libopeninv `78e3f72 → e75f87d`.
 
 (Append one row per task as branches merge to `dyno-main`.)
