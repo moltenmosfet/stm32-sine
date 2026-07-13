@@ -36,13 +36,6 @@
 #define DIGIT_TO_DEGREE(a) FP_FROMINT(angle) / (65536 / 360)
 #define DEGREE_TO_DIGIT(a) (((a) * 65536) / 360)
 
-/* Compile-time default for the qlimfrq parameter below (kept overridable via
- * -D for builds that want a different out-of-box value); the qlimfrq param
- * is what Run() actually reads each cycle. */
-#ifndef QLIMIT_FREQUENCY
-#define QLIMIT_FREQUENCY FP_FROMINT(30)
-#endif // QLIMIT_FREQUENCY
-
 static s32fp MeasureCoggingCurrent(uint16_t angle, s32fp id);
 static int32_t GenerateAntiCoggingSignal(uint16_t angle, s32fp coggingCurrent);
 static int initwait = 0;
