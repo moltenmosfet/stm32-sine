@@ -1,8 +1,22 @@
 ## About this fork
 
-This is the moltenmosfet dyno-absorber fork of jsphuebner/stm32-sine (Open
-Inverter). It drives a Nissan Leaf EM57 motor as the absorber on a chassis
-dynamometer.
+This is a bug-fix fork. Fable 5 was used to perform a deep review of:
+
+- FOC control path
+- CAN/SDO stack
+- scheduler
+- SINE build
+
+It produced 24 findings. The issues found have been fixed in this repository.
+Most are staged to be offered upstream as a PR series. Per-change notes and
+rationale are in [FORK_NOTES.md](FORK_NOTES.md).
+
+The review was done while building a dynamometer with a Nissan Leaf EM57 motor
+as its absorber, which is why it concentrates on low-speed / low-torque
+behavior.
+
+The only dyno-specific behavior sits behind two new optional parameters
+(`qlimfrq`, `dtcomp`), both defaulting to stock behavior.
 
 `dyno-main` is the integration branch. It was created off the pinned upstream
 baseline commit `1dfab85`. Fix branches (`fix/T<nn>-…`) merge into `dyno-main`
@@ -13,13 +27,6 @@ submodule and is forked in the same way, at
 [moltenmosfet/libopeninv](https://github.com/moltenmosfet/libopeninv); its
 `dyno-main` was created off pin `78e3f72`. The `libopencm3` submodule stays at
 upstream's pin and is not forked.
-
-Most changes here are tagged as upstream candidates and will be offered to
-jsphuebner as a PR series. A smaller set of changes are fork-only policy
-decisions specific to running this firmware on a dyno absorber — the
-low-speed torque-limit behavior and a deadtime compensation experiment among
-them — plus the documentation itself. Per-change notes and rationale are in
-[FORK_NOTES.md](FORK_NOTES.md).
 
 Nothing in this fork is bench-validated on hardware yet (the dyno hardware is
 still being built). Changes are host-tested and compile-checked only.
