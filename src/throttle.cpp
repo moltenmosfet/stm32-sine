@@ -54,6 +54,8 @@ float Throttle::fmax;
 int Throttle::accelmax;
 int Throttle::accelflt;
 float Throttle::maxregentravelhz;
+float Throttle::frqFiltered;
+float Throttle::fwFrqFiltered;
 
 bool Throttle::CheckAndLimitRange(int& potval, uint8_t potIdx)
 {
@@ -286,10 +288,12 @@ void Throttle::AccelerationLimitCommand(float& finalSpnt, int speed)
    lastSpeed = speed;
 }
 
-void Throttle::FrequencyLimitCommand(float& finalSpnt, float frequency)
+// Two call sites need this per Ms10Task cycle (final torque command, and
+// field-weakening current derate) -- each must run its own IIR filter once
+// per cycle, so the state is owned per caller, not shared. See
+// FrequencyLimitCommandFw for the second caller.
+void Throttle::RunFrequencyLimit(float& finalSpnt, float frequency, float& frqFiltered)
 {
-   static float frqFiltered = 0;
-
    frqFiltered = IIRFILTERF(frqFiltered, frequency, 4);
 
    if (finalSpnt > 0)
@@ -300,4 +304,14 @@ void Throttle::FrequencyLimitCommand(float& finalSpnt, float frequency)
       res = MAX(0, res);
       finalSpnt = MIN(res, finalSpnt);
    }
+}
+
+void Throttle::FrequencyLimitCommand(float& finalSpnt, float frequency)
+{
+   RunFrequencyLimit(finalSpnt, frequency, frqFiltered);
+}
+
+void Throttle::FrequencyLimitCommandFw(float& finalSpnt, float frequency)
+{
+   RunFrequencyLimit(finalSpnt, frequency, fwFrqFiltered);
 }
