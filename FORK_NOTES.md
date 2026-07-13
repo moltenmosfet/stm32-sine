@@ -55,8 +55,9 @@ so all firmware-only changes are now compile-checked).
 | T18 | UPSTREAM | superproject | review + FOC/SINE build | done — F22 (interpolation clamp) + F23 (SINGLE-mode direction-assumed comment) |
 | T19 | UPSTREAM | superproject | review + FOC/SINE build | done — F24 (ocurlim ABS guard; deadtime DTG nonlinearity documented as comment — PARAM_ENTRY has no description field) |
 | T9 | UPSTREAM | libopeninv (+super tests/bump) | host tests (4-combo matrix, exercises production code) + FOC/SINE build | done — F12 (all 3 defects fixed; pure packing logic split to canfilterpack.cpp so host tests drive real code — PR 5 may inline the split back if upstream prefers) |
+| T10 | UPSTREAM | libopeninv (+super tests/bump) | host tests (4: normal, 1.5-period overrun, both wrap directions) + FOC/SINE build | done — F15 (missed deadline resyncs `TIM_CCR = counter + period` via `CheckOverrun`, a pure static split out for host testability — T9 precedent, raw TIM_CCR MMIO isn't host-drivable; overrun counter readable via `GetOverrunCount()`, no param) |
 
 Baseline pins → current `dyno-main` tips: superproject `1dfab85 → dyno-main`,
-libopeninv `78e3f72 → 5909fdd`.
+libopeninv `78e3f72 → 274dc54`.
 
 (Append one row per task as branches merge to `dyno-main`.)
