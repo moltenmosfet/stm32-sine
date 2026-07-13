@@ -31,10 +31,10 @@
 #include "foc.h"
 #include "picontroller.h"
 #include "qclamp.h"
+#include "anticog.h"
 
 #define FRQ_TO_ANGLE(frq) FP_TOINT((frq << SineCore::BITS) / pwmfrq)
 #define DIGIT_TO_DEGREE(a) FP_FROMINT(angle) / (65536 / 360)
-#define DEGREE_TO_DIGIT(a) (((a) * 65536) / 360)
 
 static s32fp MeasureCoggingCurrent(uint16_t angle, s32fp id);
 static int32_t GenerateAntiCoggingSignal(uint16_t angle, s32fp coggingCurrent);
@@ -292,6 +292,11 @@ void PwmGeneration::RunOffsetCalibration()
    }
 }
 
+//F5/T11: this min-max spread measures ALL id disturbance over the
+//revolution, including the anti-cogging injection's own effect on id --
+//a mis-phased cogph self-reinforces up to the cogmax clamp instead of
+//converging. Fixing the estimator (e.g. synchronous demodulation) is out
+//of scope here; see include/anticog.h and the review (F5).
 static s32fp MeasureCoggingCurrent(uint16_t angle, s32fp id)
 {
    static uint16_t previousAngle = 0;
@@ -324,17 +329,9 @@ static int32_t GenerateAntiCoggingSignal(uint16_t angle, s32fp coggingCurrent)
 {
    angle += Param::GetInt(Param::cogph);
 
-   if (angle < DEGREE_TO_DIGIT(90))
-      angle = angle; //no change
-   else if (angle < DEGREE_TO_DIGIT(180)) //90 to 180°
-      angle = 32767 - angle;
-   else if (angle < DEGREE_TO_DIGIT(270)) //180 to 270°
-      angle = angle - 32767;
-   else //270 to 360°
-      angle = 65535 - angle;
-
-   uint16_t antiCog = 4 * angle;
-   int32_t antiCogScaled = ((int32_t)antiCog) - 32767;
+   //F5/T11: triangle folding done in AntiCogTriangle (include/anticog.h)
+   //to keep the final 4x scale in 32-bit -- see that header for why.
+   int32_t antiCogScaled = AntiCogTriangle(angle);
    int32_t antiCogMax = Param::GetInt(Param::cogmax);
    antiCogScaled = (antiCogScaled * FP_TOINT(coggingCurrent) * Param::GetInt(Param::cogkp)) / 65536;
    antiCogScaled = MIN(antiCogScaled, antiCogMax);
