@@ -201,7 +201,7 @@ void Encoder::UpdateRotorAngle(int dir)
          accumulatedAngle += (int16_t)(dir * numPulses * anglePerPulse);
          angle = accumulatedAngle + dir * interpolatedAngle;
          lastFrequency = ignore ? lastFrequency : FP_FROMINT(pulseMeasFrq) / (lastPulseTimespan * pulsesPerTurn);
-         detectedDirection = dir;
+         detectedDirection = dir; //F23: ASSUMED from the selected direction (seldir), not measured -- a single-channel encoder can't sense direction, so any downstream guard comparing GetRotorDirection() != seldir (e.g. the SINE-build regen guard) is inert in SINGLE mode
          break;
       case SPI:
          angle = GetAngleSPI();
