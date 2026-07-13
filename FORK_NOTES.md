@@ -54,6 +54,7 @@ so all firmware-only changes are now compile-checked).
 | T11 | UPSTREAM | superproject | host test (all 65536 angles) + FOC/SINE build | done — F5 (AntiCogTriangle helper, 32-bit fold; estimator caveat documented, estimator fix out of scope) |
 | T18 | UPSTREAM | superproject | review + FOC/SINE build | done — F22 (interpolation clamp) + F23 (SINGLE-mode direction-assumed comment) |
 | T19 | UPSTREAM | superproject | review + FOC/SINE build | done — F24 (ocurlim ABS guard; deadtime DTG nonlinearity documented as comment — PARAM_ENTRY has no description field) |
+| T9 | UPSTREAM | libopeninv (+super tests/bump) | host tests (4-combo matrix, exercises production code) + FOC/SINE build | done — F12 (all 3 defects fixed; pure packing logic split to canfilterpack.cpp so host tests drive real code — PR 5 may inline the split back if upstream prefers) |
 
 Baseline pins → current `dyno-main` tips: superproject `1dfab85 → dyno-main`,
 libopeninv `78e3f72 → 5909fdd`.
