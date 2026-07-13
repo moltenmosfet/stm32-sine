@@ -201,8 +201,9 @@ s32fp PwmGeneration::LimitCurrent()
 s32fp PwmGeneration::GetIlMax(s32fp il1, s32fp il2)
 {
    s32fp il3 = -il1 - il2;
-   s32fp ilMax = FP_MUL(il1, il1) + FP_MUL(il2, il2) + FP_MUL(il3, il3);
-   ilMax = fp_sqrt(ilMax);
+   //fp_hypot3 scales the inputs down to avoid the int32 overflow that the naive
+   //FP_MUL(il,il) sum hits above ~1500 A phase peak (issue #29).
+   s32fp ilMax = fp_hypot3(il1, il2, il3);
    ilMax = FP_MUL(ilMax, INV_SQRT_1_5);
 
    return ilMax;
