@@ -107,6 +107,10 @@ void can_filter_id_list_32bit_init(uint32_t nr, uint32_t id1, uint32_t id2,
 uint32_t stub_timer_counter = 0;
 uint32_t stub_timer_oc_value[STUB_NUM_OC];
 
+/* Stm32Scheduler's own APB1 clock arithmetic (constructor) isn't under
+ * test; libopencm3 normally defines this in code we don't compile here. */
+uint32_t rcc_apb1_frequency = 36000000;
+
 void stub_reset_timer(void)
 {
     stub_timer_counter = 0;
@@ -119,10 +123,50 @@ uint32_t timer_get_counter(uint32_t timer_peripheral)
     return stub_timer_counter;
 }
 
+void timer_set_counter(uint32_t timer_peripheral, uint32_t count)
+{
+    (void)timer_peripheral;
+    stub_timer_counter = count;
+}
+
 /* oc_id is enum tim_oc_id (int) in libopencm3; guard the index defensively. */
 void timer_set_oc_value(uint32_t timer_peripheral, int oc_id, uint32_t value)
 {
     (void)timer_peripheral;
     if (oc_id >= 0 && oc_id < STUB_NUM_OC)
         stub_timer_oc_value[oc_id] = value;
+}
+
+/* Remaining timer_* calls made by Stm32Scheduler's constructor/AddTask/Run
+ * are register setup/IRQ plumbing that Stm32Scheduler.cpp needs to link on
+ * the host; the tests below drive Stm32Scheduler::CheckOverrun (a pure
+ * function on plain values, no register access), so these are no-ops. */
+void timer_enable_preload(uint32_t timer_peripheral) { (void)timer_peripheral; }
+void timer_direction_up(uint32_t timer_peripheral) { (void)timer_peripheral; }
+void timer_set_prescaler(uint32_t timer_peripheral, uint32_t value)
+{
+    (void)timer_peripheral; (void)value;
+}
+void timer_set_period(uint32_t timer_peripheral, uint32_t period)
+{
+    (void)timer_peripheral; (void)period;
+}
+void timer_set_oc_mode(uint32_t timer_peripheral, int oc_id, int oc_mode)
+{
+    (void)timer_peripheral; (void)oc_id; (void)oc_mode;
+}
+void timer_enable_irq(uint32_t timer_peripheral, uint32_t irq)
+{
+    (void)timer_peripheral; (void)irq;
+}
+void timer_enable_counter(uint32_t timer_peripheral) { (void)timer_peripheral; }
+void timer_disable_counter(uint32_t timer_peripheral) { (void)timer_peripheral; }
+int timer_get_flag(uint32_t timer_peripheral, uint32_t flag)
+{
+    (void)timer_peripheral; (void)flag;
+    return 0;
+}
+void timer_clear_flag(uint32_t timer_peripheral, uint32_t flag)
+{
+    (void)timer_peripheral; (void)flag;
 }
