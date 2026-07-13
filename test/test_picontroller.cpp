@@ -26,6 +26,8 @@
 #include "picontroller.h"
 #include "my_fp.h"
 #include "test.h"
+#include <cstdlib>
+#include <cmath>
 
 /* Control ISR rate the real firmware runs the current loops at. */
 static const int FREQ = 8789;
@@ -95,5 +97,74 @@ static void TestWindupBoundsRecomputeOnSetMinMaxY()
    ASSERT(pi.GetIntegrator() == 562496);
 }
 
+/* ------------------------------------------------------------------ */
+/* T2 regression tests (F2, F7). These FAIL on the unfixed controller.  */
+/* ------------------------------------------------------------------ */
+
+/* F2: the integral contribution must move in small steps, not the
+ * ~625-digit staircase caused by truncating esum/frequency before
+ * multiplying by ki. A constant small error should ramp the output
+ * smoothly; master jumps 0 -> 625 every time esum crosses a multiple of
+ * the calling frequency. */
+static void TestIntegralGranularity()
+{
+   PiController pi;
+   pi.SetCallingFrequency(FREQ);
+   pi.SetGains(0, 20000);              // pure integral, curki default
+   pi.SetMinMaxY(-1000000, 1000000);   // wide: no output/windup clamp over the run
+   pi.ResetIntegrator();
+   pi.SetRef(FP_FROMINT(1));           // constant +32 error
+
+   int32_t prev = pi.Run(0);
+   int32_t maxStep = 0;
+   for (int i = 1; i < 400; i++)
+   {
+      int32_t y = pi.Run(0);
+      int32_t step = std::abs(y - prev);
+      if (step > maxStep) maxStep = step;
+      prev = y;
+   }
+
+   ASSERT(maxStep <= 10);   // master: 625; fixed: ~3
+   ASSERT(prev > 100);      // integral actually accumulated
+}
+
+/* F2 (SetIntegralGain edge): for small ki the bound FP_FROMINT((maxY*freq)/ki)
+ * overflows int32. On master that yields sign-flipped windup bounds (minSum >
+ * maxSum), and the double clamp forces the integrator to a garbage near-INT32
+ * value even for a tiny error. (Note: the *return* value is always re-clamped
+ * to [minY,maxY], so the corruption shows in the integrator state, not the
+ * output magnitude.) The fix computes the bounds in 64-bit and saturates. */
+static void TestWindupGainOverflow()
+{
+   PiController pi;
+   pi.SetCallingFrequency(FREQ);
+   pi.SetProportionalGain(0);
+   pi.SetMinMaxY(-37000, 37000);
+   pi.SetIntegralGain(3);              // (37000*8789/3)<<5 overflows int32
+   pi.ResetIntegrator();
+   pi.SetRef(FP_FROMINT(10));          // small +320 error
+   pi.Run(0);
+
+   // Correct: integrator holds the accumulated error. Master: garbage ~8e8.
+   ASSERT(pi.GetIntegrator() == 320);
+}
+
+/* F7: the float specialisation declared y/ylim as int32_t, truncating a
+ * fractional demand to an integer. */
+static void TestFloatControllerFractional()
+{
+   PiControllerFloat pf;
+   pf.SetCallingFrequency(FREQ);
+   pf.SetGains(0.5f, 0.0f);            // kp=0.5
+   pf.SetMinMaxY(-1000.0f, 1000.0f);
+   pf.ResetIntegrator();
+   pf.SetRef(1.0f);                    // err=1.0 -> y = 0.5
+
+   float y = pf.Run(0.0f);
+   ASSERT(std::fabs(y - 0.5f) < 1e-4f); // master: truncates to 0.0
+}
+
 REGISTER_TEST(PiControllerTest, TestProportional, TestOutputClamp,
-              TestWindupBoundsRecomputeOnSetMinMaxY);
+              TestWindupBoundsRecomputeOnSetMinMaxY, TestIntegralGranularity,
+              TestWindupGainOverflow, TestFloatControllerFractional);
