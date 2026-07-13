@@ -30,14 +30,11 @@
 #include "my_math.h"
 #include "foc.h"
 #include "picontroller.h"
+#include "qclamp.h"
 
 #define FRQ_TO_ANGLE(frq) FP_TOINT((frq << SineCore::BITS) / pwmfrq)
 #define DIGIT_TO_DEGREE(a) FP_FROMINT(angle) / (65536 / 360)
 #define DEGREE_TO_DIGIT(a) (((a) * 65536) / 360)
-
-#ifndef QLIMIT_FREQUENCY
-#define QLIMIT_FREQUENCY FP_FROMINT(30)
-#endif // QLIMIT_FREQUENCY
 
 static s32fp MeasureCoggingCurrent(uint16_t angle, s32fp id);
 static int32_t GenerateAntiCoggingSignal(uint16_t angle, s32fp coggingCurrent);
@@ -50,6 +47,7 @@ static s32fp idMtpa = 0, iqMtpa = 0;
 static PiController qController;
 static PiController dController;
 static PiController excController;
+static QClamp qClamp;
 static s32fp fwCurMax = 0;
 static s32fp excCurMax = 0;
 
@@ -114,10 +112,9 @@ void PwmGeneration::Run()
       int32_t ud = dController.Run(id, antiCogScaled);
       int32_t qlimit = FOC::GetQLimit(ud);
 
-      if (frqFiltered < QLIMIT_FREQUENCY)
-         qController.SetMinMaxY(dir <= 0 ? -qlimit : 0, dir >= 0 ? qlimit : 0);
-      else
-         qController.SetMinMaxY(-qlimit, qlimit);
+      //Hysteresis + slew-limited low-speed q-clamp (F1); qlimfrq=0 disables it
+      qClamp.Update(frqFiltered, qlimit, dir, FP_FROMINT(Param::GetInt(Param::qlimfrq)));
+      qController.SetMinMaxY(qClamp.GetMinLim(), qClamp.GetMaxLim());
 
       int32_t uq = qController.Run(iq);
       uint16_t advancedAngle = angle + dir * FP_TOINT(FP_MUL(Param::Get(Param::syncadv), frqFiltered));

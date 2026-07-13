@@ -9,7 +9,7 @@ BINARY		= test_sine
 OBJS		= test_main.o fu.o test_fu.o test_fp.o test_vcu.o my_fp.o my_string.o params.o vehiclecontrol.o \
 			  test_throttle.o throttle.o sine_core.o temp_meas.o stub_canhardware.o \
 			  stub_libopencm3.o picontroller.o foc.o test_picontroller.o test_foc.o \
-			  test_getilmax.o
+			  test_getilmax.o test_qclamp.o
 VPATH = ../src ../libopeninv/src
 
 # Check if the variable GITHUB_RUN_NUMBER exists. When running on the github actions running, this
