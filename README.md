@@ -31,7 +31,7 @@ upstream's pin and is not forked.
 Nothing in this fork is bench-validated on hardware yet (the dyno hardware is
 still being built). Changes are host-tested and compile-checked only.
 
-## Upgrades in this fork:
+## Fixes in this fork
 
 - **Low-speed / low-torque control quality** — the PI controller's integral
   term no longer moves in coarse steps (64-bit fix), optional dead-time
