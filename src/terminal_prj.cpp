@@ -77,7 +77,7 @@ static void StartInverter(Terminal* , char *arg)
    if (val < MOD_LAST)
    {
       Param::SetInt(Param::opmode, val);
-      PwmGeneration::SetOpmode(FP_TOINT(val));
+      PwmGeneration::SetOpmode(val);
       printf("Inverter started\r\n");
    }
    else
