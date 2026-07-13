@@ -24,6 +24,35 @@ them — plus the documentation itself. Per-change notes and rationale are in
 Nothing in this fork is bench-validated on hardware yet (the dyno hardware is
 still being built). Changes are host-tested and compile-checked only.
 
+## Upgrades in this fork:
+
+- **Low-speed / low-torque control quality** — the PI controller's integral
+  term no longer moves in coarse steps (64-bit fix), optional dead-time
+  compensation, the low-speed q-axis clamp is now a configurable policy with
+  hysteresis and slew instead of a hard polarity switch, and regen torque
+  tapers smoothly through the standstill deadband instead of cutting on/off.
+- **Encoder and angle handling** — fixed a read-modify-write race between the
+  PWM and frequency-update interrupts, clamped single-channel pulse
+  interpolation so the synthesized angle can't overshoot, and fixed a 16-bit
+  wraparound in the anti-cogging feedforward.
+- **CAN / SDO robustness** — three receive-filter setup bugs fixed (dropped
+  filters, wasted mask banks, accidental acceptance of CAN ID 0), incoming SDO
+  frames length-checked, and parameter reload / defaults / reset commands are
+  blocked while the motor is running.
+- **Scheduler reliability** — a task that overruns its period now resyncs
+  immediately instead of silently stalling for up to ~650 ms.
+- **Overcurrent and numeric safety** — the current-magnitude overflow fix from
+  upstream issue #29 is actually wired in, the modulation-limit calculation
+  can no longer underflow when `modmax` is lowered at runtime, and a negative
+  `ocurlim` can no longer invert the trip thresholds.
+- **Terminal and SINE-build fixes** — `defaults` now applies the values it
+  loads, `start` works again in the SINE build, and an RMS calculation no
+  longer divides by zero below 1 Hz.
+- **Host-side test harness** — the control classes (PI controller, FOC math,
+  CAN filter packing, scheduler overrun logic, and more) now run under a
+  native host test suite; every change is host-tested and both `CONTROL=FOC`
+  and `CONTROL=SINE` firmware builds are compile-checked.
+
 ---
 
 [![Build status](../../actions/workflows/CI-build.yml/badge.svg)](../../actions/workflows/CI-build.yml)
