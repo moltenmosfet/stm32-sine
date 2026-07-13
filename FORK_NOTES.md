@@ -33,8 +33,23 @@ the pin now). `[FORK]` tasks encode dyno policy and stay on the fork. Never push
 
 ## Applied tasks
 
-| Task | Type | Repo(s) | Branch | Status |
+Branch naming `fix/T<nn>-<slug>`, merged `--no-ff` into `dyno-main` in each repo.
+Verification: host suite = `cd test && make && ./test_sine`; firmware = `make
+CONTROL=FOC` and `make CONTROL=SINE` (ARM toolchain became available mid-wave-2,
+so all firmware-only changes are now compile-checked).
+
+| Task | Type | Repo(s) | Verification | Status |
 |---|---|---|---|---|
-| T0 | FORK | both | dyno-main | done — forks, remotes, dyno-main, this file |
+| T0 | FORK | both | n/a | done — forks, remotes, dyno-main, this file |
+| T1 | — | superproject | host suite | done — picontroller/foc under test, libopencm3 stubs |
+| T2 | UPSTREAM | libopeninv (+super bump) | host tests (3) + FOC/SINE build | done — F2/F7 |
+| T3 | UPSTREAM | libopeninv + superproject | host test + FOC build | done — F6 (GetQLimit host-tested; UpdateVoltageLimits firmware-built) |
+| T7 | FORK | superproject | FOC/SINE build + host | done — F14 (guarded #if CTRL_FOC) |
+| T8 | UPSTREAM | libopeninv (+super bump) | review + FOC build | done — F11 (review-verified per worklist; harness not cheap) |
+| T15 | UPSTREAM | superproject | host test + SINE/FOC build | done — F17 |
+| T17 | UPSTREAM | superproject | FOC/SINE build + host | done — F19/F20/F21 (3 commits) |
+
+Baseline pins → current `dyno-main` tips: superproject `1dfab85 → dyno-main`,
+libopeninv `78e3f72 → c0c83b8`.
 
 (Append one row per task as branches merge to `dyno-main`.)
