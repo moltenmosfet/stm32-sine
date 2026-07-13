@@ -16,9 +16,9 @@ isn't captured here lives in internal review notes (not part of this repo).
 
 `libopencm3` submodule is left at its pin (`5ba1bb5`); not forked.
 
-All review line numbers refer to these two pins. `dyno-main` is the integration branch
+All review line numbers refer to these two pins. `fixes` is the integration branch
 in each repo, created off the pin and pushed to `fork`. Task branches (`fix/T<nn>-<slug>`)
-fork off `dyno-main` and merge back after review.
+fork off `fixes` and merge back after review.
 
 ### libopeninv submodule discipline
 A task touching `libopeninv/` commits inside `libopeninv/`, pushes that branch to the
@@ -72,14 +72,14 @@ down reference these numbers.
 
 ## Applied tasks
 
-Branch naming `fix/T<nn>-<slug>`, merged `--no-ff` into `dyno-main` in each repo.
+Branch naming `fix/T<nn>-<slug>`, merged `--no-ff` into `fixes` in each repo.
 Verification: host suite = `cd test && make && ./test_sine`; firmware = `make
 CONTROL=FOC` and `make CONTROL=SINE` (ARM toolchain became available mid-wave-2,
 so all firmware-only changes are now compile-checked).
 
 | Task | Type | Repo(s) | Verification | Status |
 |---|---|---|---|---|
-| T0 | FORK | both | n/a | done — forks, remotes, dyno-main, this file |
+| T0 | FORK | both | n/a | done — forks, remotes, fixes, this file |
 | T1 | — | superproject | host suite | done — picontroller/foc under test, libopencm3 stubs |
 | T2 | UPSTREAM | libopeninv (+super bump) | host tests (3) + FOC/SINE build | done — F2/F7 |
 | T3 | UPSTREAM | libopeninv + superproject | host test + FOC build | done — F6 (GetQLimit host-tested; UpdateVoltageLimits firmware-built) |
@@ -98,10 +98,10 @@ so all firmware-only changes are now compile-checked).
 | T12 | UPSTREAM | both | host test (throttle IIR state isolation) + FOC/SINE build; items 2–4 review-verified | done — F16, 4 commits: throttle IIR state per caller (`FrequencyLimitCommandFw`, shared `RunFrequencyLimit` helper); `bmwAdcNextChan` wraps at `maxChan-1`; SDO frames DLC<8 rejected (libopeninv); cogging sentinels init 0 (first-crossing artifact; post-crossing resets keep ±INT32_MAX — a sample always lands between crossings). IIRFILTER rounding bias left unfixed — a metrology-polish item, not this pass's priority |
 | T16 | UPSTREAM | both | review + host regression + FOC/SINE build (terminal glue, no host harness) | done — F18: terminal `defaults` now calls `Param::Change(PARAM_LAST)` (mirrors SDO path) and both `defaults` (super) and `load` (libopeninv) gate on `saveEnabled` via new `IsSaveEnabled()` accessor; messages match the `save` gate pattern |
 | T13 | FORK (doc) | superproject | design doc only, no code | done — F3: `doc_sync_sampling_design.md`. Recommends TIM1_CC4 (JEXTSEL=1) injected trigger, Option A time-share (PWM ISR reads currents → hands injected group to resolver; JEOC ISR reads sin/cos → hands back) first, Option B (TIM1-locked excitation, single 2-deep sequence) as end-state. `syncadv`/`syncofs` re-tune required after A. Implementation gated on doc review |
-| T14 | FORK (doc) | n/a | doc only; params cross-checked vs `param_prj.h` on dyno-main | done — parameter baseline for the EM57 build, written up as an internal doc (not part of this repo). Headline: `respolepairs=4 [VERIFY]` is the #1 first-spin trap (default 1 → 4× angle); `qlimfrq=0` + supervisory re-own of ALL throttle derates (F9) = the dyno mode; bus ladder 300/320/‹350 OBC›/‹360–375 dump›/385/430/‹450 HW›; `ocurlim`/`fmax`/ladder final values gate on HV power-stage selection |
-| T20 | FORK (doc) | both | doc only, no code | done — public-facing README banners in both repos (this fork's purpose, the dyno-main/pin scheme, and the bench-validation disclosure) plus this rewrite of FORK_NOTES.md for outside readers |
+| T14 | FORK (doc) | n/a | doc only; params cross-checked vs `param_prj.h` on fixes | done — parameter baseline for the EM57 build, written up as an internal doc (not part of this repo). Headline: `respolepairs=4 [VERIFY]` is the #1 first-spin trap (default 1 → 4× angle); `qlimfrq=0` + supervisory re-own of ALL throttle derates (F9) = the dyno mode; bus ladder 300/320/‹350 OBC›/‹360–375 dump›/385/430/‹450 HW›; `ocurlim`/`fmax`/ladder final values gate on HV power-stage selection |
+| T20 | FORK (doc) | both | doc only, no code | done — public-facing README banners in both repos (this fork's purpose, the fixes/pin scheme, and the bench-validation disclosure) plus this rewrite of FORK_NOTES.md for outside readers |
 
-Baseline pins → current `dyno-main` tips: superproject `1dfab85 → dyno-main`,
+Baseline pins → current `fixes` tips: superproject `1dfab85 → fixes`,
 libopeninv `78e3f72 → e75f87d`.
 
-(Append one row per task as branches merge to `dyno-main`.)
+(Append one row per task as branches merge to `fixes`.)

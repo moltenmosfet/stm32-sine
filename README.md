@@ -18,14 +18,14 @@ behavior.
 The only dyno-specific behavior sits behind two new optional parameters
 (`qlimfrq`, `dtcomp`), both defaulting to stock behavior.
 
-`dyno-main` is the integration branch. It was created off the pinned upstream
-baseline commit `1dfab85`. Fix branches (`fix/T<nn>-…`) merge into `dyno-main`
+`fixes` is the integration branch. It was created off the pinned upstream
+baseline commit `1dfab85`. Fix branches (`fix/T<nn>-…`) merge into `fixes`
 after review.
 
 The firmware is split across two repos. `libopeninv` is vendored as a git
 submodule and is forked in the same way, at
 [moltenmosfet/libopeninv](https://github.com/moltenmosfet/libopeninv); its
-`dyno-main` was created off pin `78e3f72`. The `libopencm3` submodule stays at
+`fixes` branch was created off pin `78e3f72`. The `libopencm3` submodule stays at
 upstream's pin and is not forked.
 
 Nothing in this fork is bench-validated on hardware yet (the dyno hardware is
