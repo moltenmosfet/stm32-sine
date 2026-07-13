@@ -197,6 +197,7 @@ void Encoder::UpdateRotorAngle(int dir)
          numPulses = GetPulseTimeFiltered();
          timeSinceLastPulse = timer_get_counter(REV_CNT_TIMER);
          interpolatedAngle = ignore ? 0 : (anglePerPulse * timeSinceLastPulse) / lastPulseTimespan;
+         interpolatedAngle = MIN(interpolatedAngle, anglePerPulse); //F22: clamp to the next pulse's angle -- deceleration would otherwise overshoot it then snap back (angle sawtooth)
          accumulatedAngle += (int16_t)(dir * numPulses * anglePerPulse);
          angle = accumulatedAngle + dir * interpolatedAngle;
          lastFrequency = ignore ? lastFrequency : FP_FROMINT(pulseMeasFrq) / (lastPulseTimespan * pulsesPerTurn);
