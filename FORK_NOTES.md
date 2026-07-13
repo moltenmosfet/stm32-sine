@@ -101,7 +101,7 @@ so all firmware-only changes are now compile-checked).
 | T14 | FORK (doc) | n/a | doc only; params cross-checked vs `param_prj.h` on fixes | done — parameter baseline for the EM57 build, written up as an internal doc (not part of this repo). Headline: `respolepairs=4 [VERIFY]` is the #1 first-spin trap (default 1 → 4× angle); `qlimfrq=0` + supervisory re-own of ALL throttle derates (F9) = the dyno mode; bus ladder 300/320/‹350 OBC›/‹360–375 dump›/385/430/‹450 HW›; `ocurlim`/`fmax`/ladder final values gate on HV power-stage selection |
 | T20 | FORK (doc) | both | doc only, no code | done — public-facing README banners in both repos (this fork's purpose, the fixes/pin scheme, and the bench-validation disclosure) plus this rewrite of FORK_NOTES.md for outside readers |
 
-Baseline pins → current `fixes` tips: superproject `1dfab85 → fixes`,
-libopeninv `78e3f72 → e75f87d`.
+Baseline pins → integration branch: superproject `1dfab85 → fixes`,
+libopeninv `78e3f72 → fixes`.
 
 (Append one row per task as branches merge to `fixes`.)
