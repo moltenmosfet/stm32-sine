@@ -38,6 +38,7 @@ class Throttle
       static void IdcLimitCommand(float& finalSpnt, float idc);
       static void AccelerationLimitCommand(float& finalSpnt, int speed);
       static void FrequencyLimitCommand(float& finalSpnt, float frequency);
+      static void FrequencyLimitCommandFw(float& finalSpnt, float frequency);
       static float RampThrottle(float finalSpnt);
       static void UpdateDynamicRegenTravel(float regenTravelMax, float frequency);
       static bool IsThrottlePressed(int pot1);
@@ -72,10 +73,13 @@ class Throttle
       static float maxregentravelhz;
 
    private:
+      static void RunFrequencyLimit(float& finalSpnt, float frequency, float& frqFiltered);
       static int speedFiltered;
       static float potnomFiltered;
       static float brkRamped;
       static float throttleRamped;
+      static float frqFiltered;
+      static float fwFrqFiltered;
 };
 
 #endif // THROTTLE_H

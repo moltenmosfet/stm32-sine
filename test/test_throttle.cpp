@@ -154,5 +154,45 @@ static void TestDualThrottle()
 }
 #endif
 
+// T12/F16: FrequencyLimitCommand used to keep its IIR filter state in a
+// function-local static shared by two callers per Ms10Task cycle
+// (vehiclecontrol.cpp: the final torque command, and the field-weakening
+// current derate), so the filter ran twice as fast as its tuned time
+// constant. FrequencyLimitCommand and the new FrequencyLimitCommandFw now
+// own separate state. This test drives each filter to convergence with a
+// different target frequency and checks that driving one does not perturb
+// the other -- on master (shared static), the second block's calls would
+// have dragged the first filter's state toward 200 as well.
+static void TestFrequencyLimitStateIsolated()
+{
+   const int settleIterations = 200; // (15/16)^200 ~= 1e-5, plenty settled
+   Throttle::fmax = 100;
+
+   for (int i = 0; i < settleIterations; i++)
+   {
+      float spnt = 1000;
+      Throttle::FrequencyLimitCommand(spnt, 50);
+   }
+
+   for (int i = 0; i < settleIterations; i++)
+   {
+      float fwSpnt = 1000;
+      Throttle::FrequencyLimitCommandFw(fwSpnt, 200);
+   }
+
+   //One more primary-caller update at its already-converged frequency (50):
+   //if state were still shared with the Fw caller, this would see a filtered
+   //value near 200 instead of 50, and clamp res to ~0 instead of ~200.
+   float spnt = 1000;
+   Throttle::FrequencyLimitCommand(spnt, 50);
+   ASSERT(ABS(spnt - 200.0f) < 0.01f)
+
+   //And the Fw caller must likewise still see its own converged value (200),
+   //unaffected by the primary caller's interleaved calls above.
+   float fwSpnt = 1000;
+   Throttle::FrequencyLimitCommandFw(fwSpnt, 200);
+   ASSERT(fwSpnt == 0)
+}
+
 //This line registers the test
-REGISTER_TEST(ThrottleTest, TestSetup, TestLinearity);
+REGISTER_TEST(ThrottleTest, TestSetup, TestLinearity, TestFrequencyLimitStateIsolated);

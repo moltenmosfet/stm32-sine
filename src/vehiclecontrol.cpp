@@ -357,7 +357,7 @@ float VehicleControl::ProcessThrottle()
       //At 110% fmax start derating field weakening current just in case it has a torque producing component
       Throttle::fmax = Param::GetFloat(Param::fmax) * 1.1f;
       float fwPercent = 100;
-      Throttle::FrequencyLimitCommand(fwPercent, fstat);
+      Throttle::FrequencyLimitCommandFw(fwPercent, fstat);
       PwmGeneration::SetFwExcCurMax(fwPercent * Param::GetFloat(Param::fwcurmax) / 100.0f, Param::GetFloat(Param::excurmax));
 #endif // CONTROL
    }
