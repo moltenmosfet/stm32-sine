@@ -175,6 +175,35 @@ static void TestZeroThresholdAlwaysFullRange()
    }
 }
 
+/* Regression guard: stock code called SetMinMaxY(-qlimit, qlimit) every
+ * cycle, so the bounds tracked a shrinking qlimit instantly. The slew must
+ * not reintroduce lag on the SHRINKING direction -- only opening/transition
+ * is allowed to lag. Converge fully open at a large qlimit, then drop
+ * qlimit sharply in one call: the returned bounds must already be within
+ * the new, smaller +-qlimit on that same call, not 256 calls later. */
+static void TestQlimitShrinkIsInstant()
+{
+   QClamp clamp;
+   int32_t bigQlimit = QLIMIT;
+   int32_t smallQlimit = 100;
+
+   for (int i = 0; i < 400; i++)
+      clamp.Update(FP_FROMINT(60), bigQlimit, 1, THRESHOLD); // converge fully open
+
+   ASSERT(clamp.GetMinLim() == -bigQlimit);
+   ASSERT(clamp.GetMaxLim() == bigQlimit);
+
+   clamp.Update(FP_FROMINT(60), smallQlimit, 1, THRESHOLD); // qlimit collapses
+
+   ASSERT(clamp.GetMinLim() >= -smallQlimit);
+   ASSERT(clamp.GetMaxLim() <= smallQlimit);
+   // Confirm it's the hard clamp doing this, not a slew step that happens
+   // to land in range: the drop (bigQlimit - smallQlimit) is far larger
+   // than one slew step (bigQlimit / 256).
+   ASSERT((bigQlimit - smallQlimit) > (bigQlimit / 256));
+}
+
 REGISTER_TEST(QClampTest, TestNoOscillationOnDitherFromRestricted,
               TestNoOscillationOnDitherFromUnrestricted, TestSlewRateNeverExceedsLimit,
-              TestSlewStepIsExact, TestZeroThresholdAlwaysFullRange);
+              TestSlewStepIsExact, TestZeroThresholdAlwaysFullRange,
+              TestQlimitShrinkIsInstant);

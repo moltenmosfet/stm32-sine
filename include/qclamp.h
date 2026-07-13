@@ -20,6 +20,7 @@
 #define QCLAMP_H_INCLUDED
 
 #include "my_fp.h"
+#include "my_math.h"
 
 /** Hysteresis + slew-limited bounds for the low-speed q-axis clamp (F1).
  * Below thresholdHz the q-axis PI output is restricted to one quadrant
@@ -35,6 +36,13 @@
  * PiController calls) so it is host-testable on its own; the caller feeds
  * it the current inputs each cycle and applies GetMinLim()/GetMaxLim() to
  * whatever it is clamping.
+ *
+ * The walked bounds are always hard-clamped to the live +-qlimit on every
+ * call: stock behavior recomputed SetMinMaxY(-qlimit, qlimit) every cycle,
+ * so a shrinking qlimit (ud swinging toward the voltage circle) must take
+ * effect instantly, same as stock. The slew only governs how fast the
+ * range OPENS and how the restricted/unrestricted transition happens --
+ * never how far outside the current qlimit it's allowed to sit.
  */
 class QClamp
 {
@@ -70,6 +78,12 @@ class QClamp
 
          qMinLim = StepTowards(qMinLim, targetMin, maxStep);
          qMaxLim = StepTowards(qMaxLim, targetMax, maxStep);
+
+         // Shrinking qlimit must apply instantly (stock behavior); the slew
+         // only limits how fast the bounds can OPEN, never how far they can
+         // sit outside the live circle.
+         qMinLim = MAX(qMinLim, -qlimit);
+         qMaxLim = MIN(qMaxLim, qlimit);
       }
 
       int32_t GetMinLim() const { return qMinLim; }
