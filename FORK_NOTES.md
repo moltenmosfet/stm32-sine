@@ -57,8 +57,9 @@ so all firmware-only changes are now compile-checked).
 | T9 | UPSTREAM | libopeninv (+super tests/bump) | host tests (4-combo matrix, exercises production code) + FOC/SINE build | done — F12 (all 3 defects fixed; pure packing logic split to canfilterpack.cpp so host tests drive real code — PR 5 may inline the split back if upstream prefers) |
 | T10 | UPSTREAM | libopeninv (+super tests/bump) | host tests (4: normal, 1.5-period overrun, both wrap directions) + FOC/SINE build | done — F15 (missed deadline resyncs `TIM_CCR = counter + period` via `CheckOverrun`, a pure static split out for host testability — T9 precedent, raw TIM_CCR MMIO isn't host-drivable; overrun counter readable via `GetOverrunCount()`, no param) |
 | T12 | UPSTREAM | both | host test (throttle IIR state isolation) + FOC/SINE build; items 2–4 review-verified | done — F16, 4 commits: throttle IIR state per caller (`FrequencyLimitCommandFw`, shared `RunFrequencyLimit` helper); `bmwAdcNextChan` wraps at `maxChan-1`; SDO frames DLC<8 rejected (libopeninv); cogging sentinels init 0 (first-crossing artifact; post-crossing resets keep ±INT32_MAX — a sample always lands between crossings). IIRFILTER rounding bias skipped per worklist |
+| T16 | UPSTREAM | both | review + host regression + FOC/SINE build (terminal glue, no host harness) | done — F18: terminal `defaults` now calls `Param::Change(PARAM_LAST)` (mirrors SDO path) and both `defaults` (super) and `load` (libopeninv) gate on `saveEnabled` via new `IsSaveEnabled()` accessor; messages match the `save` gate pattern |
 
 Baseline pins → current `dyno-main` tips: superproject `1dfab85 → dyno-main`,
-libopeninv `78e3f72 → 5ab03df`.
+libopeninv `78e3f72 → 1114748`.
 
 (Append one row per task as branches merge to `dyno-main`.)
