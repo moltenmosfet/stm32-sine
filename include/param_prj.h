@@ -71,6 +71,11 @@
 #define INVERTER_PARAMETERS_COMMON \
     PARAM_ENTRY(CAT_INVERTER,pwmfrq,      PWMFRQS,   0,      2,      1,      13  ) \
     PARAM_ENTRY(CAT_INVERTER,pwmpol,      PWMPOLS,   0,      1,      0,      52  ) \
+    /* deadtime is the raw value written to the STM32 timer's DTG deadtime */ \
+    /* generator register (timer_set_deadtime), not a linear ns figure: the */ \
+    /* DTG encoding is nonlinear above 127, where the step size jumps from */ \
+    /* 14 ns to 111+ ns per count (F24). A value assumed to scale linearly */ \
+    /* from the sub-127 range yields roughly 2-4x the intended deadtime. */ \
     PARAM_ENTRY(CAT_INVERTER,deadtime,    "dig",     0,      255,    63,     14  ) \
     PARAM_ENTRY(CAT_INVERTER,ocurlim,     "A",       -65536, 65536,  100,    22  ) \
     PARAM_ENTRY(CAT_INVERTER,il1gain,     "dig/A",   -100,   100,    4.7,    27  ) \
