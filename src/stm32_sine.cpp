@@ -291,6 +291,15 @@ void Param::Change(Param::PARAM_NUM paramNum)
                break;
          }
          break;
+   #if CONTROL == CTRL_FOC
+      case Param::manualid:
+      case Param::manualiq:
+         //High-rate torque-command hook: the FOC loop reads these directly via
+         //Param::Get every ISR cycle, so there is nothing to recompute here.
+         //Return immediately to keep the ~50-100us soft-float default-branch
+         //reconfiguration out of the CAN RX ISR on every command frame.
+         return;
+   #endif
       case Param::throtmax:
       case Param::throtmin:
       case Param::idcmin:
