@@ -24,7 +24,7 @@
    2. Temporary parameters
    3. Display values
  */
-//Next param id (increase when adding new parameter!): 166
+//Next param id (increase when adding new parameter!): 167
 //Next value Id: 2058
 /*              category     name         unit       min     max     default id */
 
@@ -66,6 +66,7 @@
     PARAM_ENTRY(CAT_MOTOR,   fluxlinkage, "mWeber",  0,      1000,   90,     140 ) \
     PARAM_ENTRY(CAT_MOTOR,   syncadv,     "dig/Hz",  0,      65535,  10,     133 ) \
     PARAM_ENTRY(CAT_MOTOR,   qlimfrq,     "Hz",      0,      100,    30,     165 ) \
+    PARAM_ENTRY(CAT_MOTOR,   dtcomp,      "dig",     0,      2000,   0,      166 ) \
 
 #define INVERTER_PARAMETERS_COMMON \
     PARAM_ENTRY(CAT_INVERTER,pwmfrq,      PWMFRQS,   0,      2,      1,      13  ) \
