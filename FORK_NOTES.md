@@ -49,8 +49,9 @@ so all firmware-only changes are now compile-checked).
 | T15 | UPSTREAM | superproject | host test + SINE/FOC build | done — F17 |
 | T17 | UPSTREAM | superproject | FOC/SINE build + host | done — F19/F20/F21 (3 commits) |
 | T4 | FORK | superproject | host tests (7) + FOC/SINE build | done — F1 (QClamp policy class, `qlimfrq` param id 165, 0 = dyno mode / restriction off; shrinking qlimit clamps instantly; dead QLIMIT_FREQUENCY macro removed) |
+| T5 | FORK→UPSTREAM cand. | libopeninv + superproject | host tests (4) + FOC/SINE build | done — F10 (`dtcomp` param id 166, default 0 = off; signs captured in ParkClarke, applied in InvParkClarke before short-pulse suppression; 2 A deadband; pinswap resolved at call site) |
 
 Baseline pins → current `dyno-main` tips: superproject `1dfab85 → dyno-main`,
-libopeninv `78e3f72 → c0c83b8`.
+libopeninv `78e3f72 → 5909fdd`.
 
 (Append one row per task as branches merge to `dyno-main`.)
