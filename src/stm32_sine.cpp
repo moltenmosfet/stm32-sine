@@ -319,6 +319,7 @@ void Param::Change(Param::PARAM_NUM paramNum)
          Encoder::SwapSinCos((Param::GetInt(Param::pinswap) & SWAP_RESOLVER) > 0);
          FOC::SetMotorParameters(Param::GetFloat(Param::lqminusld) / 1000.0f, Param::GetFloat(Param::fluxlinkage) / 1000.0f);
          FOC::SetMaximumModulationIndex(Param::GetInt(Param::modmax));
+         PwmGeneration::UpdateVoltageLimits(); //modmax is live: re-clamp d/q (no-op unless RUN)
          #endif // CONTROL
 
          Encoder::SetMode((enum Encoder::mode)Param::GetInt(Param::encmode));

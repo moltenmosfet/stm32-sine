@@ -53,6 +53,15 @@ static void TestGetQLimitEdges()
    ASSERT(FOC::GetQLimit(modMax) == 0);
 }
 
+/* F6/T3: ud beyond modMax makes modMaxPow2 - ud*ud negative. The unsigned sqrt
+ * then reads it as a huge uint32 and returns a garbage q-limit (~65k),
+ * commanding overmodulation. The fix clamps the radicand at 0. */
+static void TestGetQLimitRadicandClamp()
+{
+   int32_t modMax = FOC::GetMaximumModulationIndex();
+   ASSERT(FOC::GetQLimit(modMax + 1000) == 0); // master: ~65k
+}
+
 /* ParkClarke preserves magnitude regardless of rotor angle:
  *   id^2 + iq^2 = ia^2 + ib^2 for all angles (Park is a rotation). */
 static void TestParkClarkeMagnitudeInvariance()
@@ -117,5 +126,6 @@ static void TestMtpaSymmetryAndMagnitude()
    ASSERT(WithinPercent((int64_t)mag, 10000, 1)); // is^2 = 100^2
 }
 
-REGISTER_TEST(FocTest, TestGetQLimitEdges, TestParkClarkeMagnitudeInvariance,
+REGISTER_TEST(FocTest, TestGetQLimitEdges, TestGetQLimitRadicandClamp,
+              TestParkClarkeMagnitudeInvariance,
               TestInvParkClarkeLineVoltageInvariance, TestMtpaSymmetryAndMagnitude);

@@ -201,6 +201,20 @@ void PwmGeneration::SetControllerGains(int iqkp, int idkp, int exckp, int ki)
    excController.SetGains(exckp, 1000);
 }
 
+/** Re-apply the d/q voltage clamp after modmax changes at runtime. PwmInit
+ * freezes maxVd = modMax-1000 at RUN entry; without this the d-controller keeps
+ * a stale clamp when modmax is lowered mid-run. No-op outside RUN, where
+ * PwmInit will (re)apply the limits on the next start. */
+void PwmGeneration::UpdateVoltageLimits()
+{
+   if (opmode != MOD_RUN)
+      return;
+
+   int32_t maxVd = FOC::GetMaximumModulationIndex() - 1000;
+   qController.SetMinMaxY(-maxVd, maxVd);
+   dController.SetMinMaxY(-maxVd, maxVd);
+}
+
 void PwmGeneration::PwmInit()
 {
    int32_t maxVd = FOC::GetMaximumModulationIndex() - 1000;
