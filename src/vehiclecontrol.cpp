@@ -32,6 +32,7 @@
 #include "my_math.h"
 #include "pwmgeneration.h"
 #include "hwinit.h"
+#include "regentaperhold.h"
 
 #define PRECHARGE_TIMEOUT 500 //5s
 #define CAN_TIMEOUT       50  //500ms
@@ -273,6 +274,8 @@ void VehicleControl::SelectDirection()
    Param::SetInt(Param::seldir, selectedDir);
 }
 
+static RegenTaperHold regenTaperHold;
+
 float VehicleControl::ProcessThrottle()
 {
    float throtSpnt = 0, finalSpnt;
@@ -340,10 +343,10 @@ float VehicleControl::ProcessThrottle()
       float rotorfreq = FP_TOFLOAT(Encoder::GetRotorFrequency());
       float brkrampstr = Param::GetFloat(Param::regenrampstr);
 
-      if (rotorfreq < brkrampstr && finalSpnt < 0)
-      {
-         finalSpnt = (rotorfreq / brkrampstr) * finalSpnt;
-      }
+      //rotorfreq reads exactly 0 below the encoder's deadband (F4), not
+      //"stopped" -- regenTaperHold holds the last nonzero taper factor for
+      //up to 500 ms instead of snapping regen torque straight to zero.
+      finalSpnt = regenTaperHold.Apply(rotorfreq, brkrampstr, finalSpnt);
 
 #if CONTROL == CTRL_FOC
       if (finalSpnt < 0)

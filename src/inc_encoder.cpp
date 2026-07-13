@@ -26,6 +26,7 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/adc.h>
 #include <libopencm3/stm32/rcc.h>
+#include <libopencm3/cm3/cortex.h>
 #include "errormessage.h"
 #include "params.h"
 #include "sine_core.h"
@@ -239,27 +240,38 @@ void Encoder::UpdateRotorAngle(int dir)
  */
 void Encoder::UpdateRotorFrequency(int callingFrequency)
 {
-   distance += turnsSinceLastSample;
+   //turnsSinceLastSample is incremented by UpdateRotorAngle()/UpdateTurns(),
+   //called from the PWM ISR (priority 1). This function runs in the
+   //lower-priority scheduler ISR (priority 14), so a plain read-then-assign-0
+   //can lose an increment that lands between the read and the clear, biasing
+   //the measured frequency low by up to one sample (~10% at 30 Hz elec).
+   //Copy the accumulator out and subtract only what was read, with
+   //interrupts briefly disabled around the copy+subtract, so a concurrent
+   //increment is preserved for the next call instead of being clobbered.
+   cm_disable_interrupts();
+   int32_t turns = turnsSinceLastSample;
+   turnsSinceLastSample -= turns;
+   cm_enable_interrupts();
+
+   distance += turns;
 
    if ((encMode == AB) || (encMode == ABZ))
    {
       //65536 is one turn
-      lastFrequency = (callingFrequency * turnsSinceLastSample) / FP_TOINT(TWO_PI);
-      turnsSinceLastSample = 0;
+      lastFrequency = (callingFrequency * turns) / FP_TOINT(TWO_PI);
    }
    else if ((encMode == RESOLVER) || (encMode == SPI) || (encMode == SINCOS))
    {
-      int absTurns = ABS(turnsSinceLastSample);
+      int absTurns = ABS(turns);
       if (startupDelay == 0 && absTurns > STABLE_ANGLE)
       {
          lastFrequency = (callingFrequency * absTurns) / FP_TOINT(TWO_PI);
-         detectedDirection = turnsSinceLastSample > 0 ? 1 : -1;
+         detectedDirection = turns > 0 ? 1 : -1;
       }
       else
       {
          lastFrequency = 0;
       }
-      turnsSinceLastSample = 0;
    }
 }
 
