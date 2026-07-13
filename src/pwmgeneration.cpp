@@ -253,6 +253,13 @@ void PwmGeneration::EnableChargeOutput()
 
 void PwmGeneration::SetCurrentLimitThreshold(s32fp ocurlim)
 {
+   //F24: ocurlim==-1 is a HW_PRIUS-only sentinel meaning "disable break
+   //input", handled separately in TimerSetup (reads Param::ocurlim
+   //directly, not this argument). Any other negative value here would
+   //silently invert the comparator window below (limNeg > limPos) with
+   //undefined trip behavior -- the param minimum is -65536, one typo away.
+   ocurlim = ABS(ocurlim);
+
    //We use the average offset and gain values because we only
    //have one reference channel per polarity
    s32fp iofs = (ilofs[0] + ilofs[1]) / 2;
