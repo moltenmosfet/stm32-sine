@@ -201,10 +201,7 @@ extern "C" uint32_t rtc_get_counter_val()
    return rtc;
 }
 
-extern "C" void timer_set_oc_value(uint32_t, enum tim_oc_id, uint32_t)
-{
-
-}
+/* timer_set_oc_value now lives in stub_libopencm3.c (recording stub, T1) */
 
 extern "C" void spi_setup()
 {
