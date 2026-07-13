@@ -59,8 +59,19 @@ extern "C" const TERM_CMD TermCmds[] =
 
 static void LoadDefaults(Terminal* , char *)
 {
-   Param::LoadDefaults();
-   printf("Defaults loaded\r\n");
+   //Defaults end in a full parameter apply, same as LOAD; forbid it while
+   //running (same "not in RUN" gate as SAVE) so it cannot desync the field
+   //(encmode/polepairs etc.) mid-run.
+   if (TerminalCommands::IsSaveEnabled())
+   {
+      Param::LoadDefaults();
+      Param::Change(Param::PARAM_LAST);
+      printf("Defaults loaded\r\n");
+   }
+   else
+   {
+      printf("Will not load defaults in run modes, please stop before loading!\r\n");
+   }
 }
 
 static void StopInverter(Terminal*, char *)
