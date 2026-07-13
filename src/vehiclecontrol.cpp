@@ -874,7 +874,7 @@ void VehicleControl::BmwAdcAcquire()
    uint16_t data = spi_xfer(SPI1, adcGetManual | adcSetDio | adcVrefDual | (bmwAdcNextChan << 7));
    DigIo::spi_cs_out.Set();
    uint16_t readChan = data >> 12;
-   bmwAdcNextChan = (bmwAdcNextChan == maxChan) ? 0 : bmwAdcNextChan + 1;
+   bmwAdcNextChan = (bmwAdcNextChan >= maxChan - 1) ? 0 : bmwAdcNextChan + 1;
 
    if (readChan < maxChan)
       bmwAdcValues[readChan] = data & 0xFFF;
