@@ -126,6 +126,106 @@ static void TestMtpaSymmetryAndMagnitude()
    ASSERT(WithinPercent((int64_t)mag, 10000, 1)); // is^2 = 100^2
 }
 
+/* F10/T5 dead-time compensation. ParkClarke captures phaseSign[0..2] from its
+ * (il1, il2) arguments (il3 = -il1-il2); InvParkClarke adds/subtracts dtcomp
+ * digits per phase accordingly. Currents here are the global Q5 s32fp (this
+ * test file does not redefine CST_DIGITS the way foc.cpp does internally). */
+
+/* Straight (non-swapped) calling convention: DutyCycles[0]/[1]/[2] follow the
+ * sign of il1, il2, and -(il1+il2) respectively. */
+static void TestDeadtimeCompSignMapping()
+{
+   const s32fp il1 = FP_FROMINT(10);  // +10 A -> phase0 positive
+   const s32fp il2 = FP_FROMINT(3);   // +3 A  -> phase1 positive
+   // il3 = -13 A -> phase2 negative
+   const int32_t ud = 5000, uq = 3000; // inside modMax, no short-pulse clamp
+
+   FOC::SetAngle(0);
+   FOC::ParkClarke(il1, il2);
+
+   FOC::InvParkClarke(ud, uq, 0);
+   int32_t base0 = FOC::DutyCycles[0];
+   int32_t base1 = FOC::DutyCycles[1];
+   int32_t base2 = FOC::DutyCycles[2];
+
+   FOC::InvParkClarke(ud, uq, 100);
+   ASSERT(FOC::DutyCycles[0] - base0 == 100);
+   ASSERT(FOC::DutyCycles[1] - base1 == 100);
+   ASSERT(FOC::DutyCycles[2] - base2 == -100);
+}
+
+/* SWAP_CURRENTS calling convention: the caller (ProcessCurrents) resolves the
+ * pinswap itself by swapping which measured current it passes as il1 vs il2.
+ * ParkClarke has no pinswap awareness -- it just captures signs from argument
+ * order -- so phaseSign[i] stays aligned with DutyCycles[i] as long as the
+ * caller passed the swapped pair, which this test reproduces directly. */
+static void TestDeadtimeCompRespectsPinswapCallingConvention()
+{
+   const s32fp measuredIl1 = FP_FROMINT(-10); // wired to duty-channel 1 here
+   const s32fp measuredIl2 = FP_FROMINT(6);   // wired to duty-channel 0 here
+   // il3 = -(measuredIl2 + measuredIl1) = +4 A -> phase2 positive
+   const int32_t ud = 3000, uq = 1000;
+
+   FOC::SetAngle(5000);
+   FOC::ParkClarke(measuredIl2, measuredIl1); // SWAP_CURRENTS calling order
+
+   FOC::InvParkClarke(ud, uq, 0);
+   int32_t base0 = FOC::DutyCycles[0];
+   int32_t base1 = FOC::DutyCycles[1];
+   int32_t base2 = FOC::DutyCycles[2];
+
+   FOC::InvParkClarke(ud, uq, 150);
+   ASSERT(FOC::DutyCycles[0] - base0 == 150);   // follows measuredIl2 (+6 A)
+   ASSERT(FOC::DutyCycles[1] - base1 == -150);  // follows measuredIl1 (-10 A)
+   ASSERT(FOC::DutyCycles[2] - base2 == 150);   // follows il3 (+4 A)
+}
+
+/* All three currents inside the +-2 A deadband -> no compensation on any
+ * phase regardless of dtcomp magnitude. */
+static void TestDeadtimeCompDeadband()
+{
+   const s32fp il1 = FP_FROMFLT(0.5); // il3 = -1.0 A; all three within +-2 A
+   const s32fp il2 = FP_FROMFLT(0.5);
+   const int32_t ud = 4000, uq = 2000;
+
+   FOC::SetAngle(20000);
+   FOC::ParkClarke(il1, il2);
+
+   FOC::InvParkClarke(ud, uq, 0);
+   int32_t base0 = FOC::DutyCycles[0];
+   int32_t base1 = FOC::DutyCycles[1];
+   int32_t base2 = FOC::DutyCycles[2];
+
+   FOC::InvParkClarke(ud, uq, 500);
+   ASSERT(FOC::DutyCycles[0] == base0);
+   ASSERT(FOC::DutyCycles[1] == base1);
+   ASSERT(FOC::DutyCycles[2] == base2);
+}
+
+/* dtcomp == 0 (the param default) must leave duties byte-for-byte identical
+ * to omitting the argument entirely (default parameter value). */
+static void TestDeadtimeCompOffByDefaultLeavesDutiesUnchanged()
+{
+   const s32fp il1 = FP_FROMINT(10);
+   const s32fp il2 = FP_FROMINT(-10);
+   const int32_t ud = 4000, uq = 2000;
+
+   FOC::SetAngle(10000);
+   FOC::ParkClarke(il1, il2);
+
+   FOC::InvParkClarke(ud, uq); // default dtcomp = 0
+   int32_t d0 = FOC::DutyCycles[0];
+   int32_t d1 = FOC::DutyCycles[1];
+   int32_t d2 = FOC::DutyCycles[2];
+
+   FOC::InvParkClarke(ud, uq, 0); // explicit 0
+   ASSERT(FOC::DutyCycles[0] == d0);
+   ASSERT(FOC::DutyCycles[1] == d1);
+   ASSERT(FOC::DutyCycles[2] == d2);
+}
+
 REGISTER_TEST(FocTest, TestGetQLimitEdges, TestGetQLimitRadicandClamp,
               TestParkClarkeMagnitudeInvariance,
-              TestInvParkClarkeLineVoltageInvariance, TestMtpaSymmetryAndMagnitude);
+              TestInvParkClarkeLineVoltageInvariance, TestMtpaSymmetryAndMagnitude,
+              TestDeadtimeCompSignMapping, TestDeadtimeCompRespectsPinswapCallingConvention,
+              TestDeadtimeCompDeadband, TestDeadtimeCompOffByDefaultLeavesDutiesUnchanged);

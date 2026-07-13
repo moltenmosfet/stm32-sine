@@ -119,7 +119,7 @@ void PwmGeneration::Run()
       int32_t uq = qController.Run(iq);
       uint16_t advancedAngle = angle + dir * FP_TOINT(FP_MUL(Param::Get(Param::syncadv), frqFiltered));
       FOC::SetAngle(advancedAngle);
-      FOC::InvParkClarke(ud, uq);
+      FOC::InvParkClarke(ud, uq, Param::GetInt(Param::dtcomp)); //F10/T5 dead-time comp
 
       s32fp idc = (iq * uq + id * ud) / FOC::GetMaximumModulationIndex();
       idc = FP_MUL(idc, dcCurFac);
