@@ -300,7 +300,10 @@ void PwmGeneration::RunOffsetCalibration()
 static s32fp MeasureCoggingCurrent(uint16_t angle, s32fp id)
 {
    static uint16_t previousAngle = 0;
-   static s32fp minId = 0x7fffffff, maxId = -0x7fffffff;
+   //Init at 0, not +-INT32_MAX: if the very first call already lands past the
+   //crossing (before any real sample updated these), ABS(minId-maxId) must
+   //come out 0, not overflow-wrap to a ~2A garbage reading (F16).
+   static s32fp minId = 0, maxId = 0;
    static s32fp coggingCurrent = 0;
 
    if (previousAngle < 32767 && angle > 32767)
