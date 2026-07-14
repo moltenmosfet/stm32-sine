@@ -40,8 +40,9 @@ marked FORK (T1, T4, T5, T6's taper half, T7, T13, T14, T20) stay on the fork; T
 ## Findings glossary
 
 Each finding below (F1–F24) came out of a source-level review of the FOC control path,
-the CAN/SDO stack, the scheduler, and the SINE build. Task rows in the table further
-down reference these numbers.
+the CAN/SDO stack, the scheduler, and the SINE build; F25 was found while porting the
+upstream `35=AutoTune` branch. Task rows in the table further down reference these
+numbers.
 
 | # | What the defect is |
 |---|---|
@@ -69,6 +70,7 @@ down reference these numbers.
 | F22 | Angle interpolation between pulses on single-channel encoders isn't clamped, so it can overshoot past the next real pulse and then snap back — a sawtooth in the synthesized angle. |
 | F23 | A regen safety guard meant to block driving in the wrong direction compares a value against itself in single-channel encoder mode, so it can never trigger — looks like protection, does nothing. |
 | F24 | Documentation/config traps for all users: a negative overcurrent-limit parameter silently inverts the trip thresholds on non-Prius hardware instead of disabling the limit; the deadtime parameter is a nonlinear hardware register code, not a linear time value; two output modes stay nominally enabled in the FOC build without actually driving anything; and current-limiting has undocumented floors below which it can't act. |
+| F25 | In the upstream `35=AutoTune` branch, the bidirectional test-spin's averaged sync-error output can never publish: the test angle always steps in twos (even values only) but the pass-end check compares against an odd endpoint, so the condition is unreachable and the intermediate half-average is silently overwritten every revolution instead. |
 
 ## Applied tasks
 
@@ -100,6 +102,7 @@ so all firmware-only changes are now compile-checked).
 | T13 | FORK (doc) | superproject | design doc only, no code | done — F3: `doc_sync_sampling_design.md`. Recommends TIM1_CC4 (JEXTSEL=1) injected trigger, Option A time-share (PWM ISR reads currents → hands injected group to resolver; JEOC ISR reads sin/cos → hands back) first, Option B (TIM1-locked excitation, single 2-deep sequence) as end-state. `syncadv`/`syncofs` re-tune required after A. Implementation gated on doc review |
 | T14 | FORK (doc) | n/a | doc only; params cross-checked vs `param_prj.h` on fixes | done — parameter baseline for the EM57 build, written up as an internal doc (not part of this repo). Headline: `respolepairs=4 [VERIFY]` is the #1 first-spin trap (default 1 → 4× angle); `qlimfrq=0` + supervisory re-own of ALL throttle derates (F9) = the dyno mode; bus ladder 300/320/‹350 OBC›/‹360–375 dump›/385/430/‹450 HW›; `ocurlim`/`fmax`/ladder final values gate on HV power-stage selection |
 | T20 | FORK (doc) | both | doc only, no code | done — public-facing README banners in both repos (this fork's purpose, the fixes/pin scheme, and the bench-validation disclosure) plus this rewrite of FORK_NOTES.md for outside readers |
+| B2 | FORK (bench branch, **unmerged**) | superproject | host suite + FOC/SINE build; **NO HW PASS** | on `feat/B2-autotune` — port of upstream `35=AutoTune` (Pete's commissioning test modes via Jamie Jones, tip 1797847, upstream-untested): resolver check / phase check with inductance estimate / fwd+bidir test spins with sync-error spot values. Params renumbered to 167–171, values 2058–2060 (upstream's ids collided). Fixed F25 en route; added the missing entry path (`manualstart` + `testmode`≠0 → ManualRun via the normal start flow; physical start input always wins) and a `testres` terminal command for the phase-check verdict. Deliberately NOT merged to `fixes`: commissioning tooling, stock behavior unaffected only because the branch is separate |
 
 Baseline pins → integration branch: superproject `1dfab85 → fixes`,
 libopeninv `78e3f72 → fixes`.
