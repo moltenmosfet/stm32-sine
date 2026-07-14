@@ -1,8 +1,9 @@
 # PWM-synchronous phase-current sampling — design investigation (F3 / T13)
 
 Status: **design-only, decision-ready.** No code changed. Target: STM32F103 (RM0008),
-this fork's dyno-main. Audience: fork maintainers. All line refs verified on `dyno-main`
-(superproject `a7af5a4`, libopeninv `1114748`).
+this fork's `fixes` branch (formerly dyno-main). Audience: fork maintainers. All line
+refs verified on `dyno-main` (superproject `a7af5a4`, libopeninv `1114748`); the
+Option C addendum (15 Jul 2026) re-verified its refs on `fixes`.
 
 ## Problem (F3 recap, grounded)
 
@@ -174,12 +175,81 @@ amplitude/phase and the `resolverMax-resolverMin > MIN_RES_AMP` gate
 Higher payoff (lowest steady-state overhead) but touches the load-bearing angle source more
 invasively.
 
-### Recommendation
+### Option C (addendum, 15 Jul 2026) — independent injected groups, currents sequential on ADC2
 
-**Implement Option A first.** It isolates the current-SNR change, keeps the resolver
-excitation/demod untouched, and its only resolver-side perturbation (angle-read latency →
-`syncadv` re-tune) is a bench parameter step. Once A demonstrates the id/iq noise-floor win
-on the dyno, **graduate to Option B** to shed the JEOC ISR and per-cycle reprogramming.
+Provenance: upstream's unmerged `use-adc2` branch (`c46ee22`, Oct 2022) puts **both**
+current channels on one ADC's injected group as a sequential sequence. The branch itself
+is unusable on resolver hardware (it software-starts ADC2's injected group, which the
+resolver owns as the CRSISM slave — two consumers, same group) and has two defects
+(trigger = JSWSTART at ISR entry, so sampling inherits ISR-entry jitter; the EOC wait
+before reading is commented out). But the sequential-sequence idea invalidates this doc's
+crux *premise*: il1/il2 do **not** need simultaneous conversion on the ADC1/ADC2 pair.
+il1 = ADC12_IN5 and il2 = ADC12_IN8 are both reachable by ADC2 alone; likewise sin = IN6
+and cos = IN7 are both reachable by ADC1 alone. That allows a clean split with **no
+time-sharing at all**:
+
+- **DUALMOD: CRSISM → RSM** (`ADC_CR1_DUALMOD_RSM = 0x6`,
+  `libopencm3/include/libopencm3/stm32/f1/adc.h:115`; RM0008 §11.9 "regular simultaneous
+  mode only"). The regular group keeps dual-simultaneous operation — untouched AnaIn scan,
+  and ADC2's regular results still reach memory through ADC1's 32-bit DR + DMA (ADC2 has
+  no DMA on F103, which is why plain independent mode `0x0` is not an option). The
+  *injected* groups stop being master/slave and run their own JEXTSEL triggers.
+- **ADC1 injected = resolver, 3-deep {IN6 dummy, IN6 sin, IN7 cos}, JEXTSEL = TIM3_CC4**
+  (unchanged trigger, `src/inc_encoder.cpp:499`). The dummy keeps the existing
+  noisy-first-sample convention (`src/inc_encoder.cpp:462-464`). Excitation generation,
+  the 40 µs one-shot, and the read-on-next-ISR timing (`GetAngleResolver`,
+  `src/inc_encoder.cpp:543-563`) are all untouched — **angle latency is identical to
+  master, so no `syncadv`/`syncofs` re-tune** (Option A's main perturbation, gone).
+  `DecodeAngle` reads become ADC1 rank 2 (sin) / rank 3 (cos) instead of rank 2 on two
+  ADCs (`src/inc_encoder.cpp:581-582`); keep the `sinAdc`/`cosAdc` pinswap indirection as
+  a rank pair. Init-time offset determination reads both ranks from one ADC1 JSWSTART;
+  JOFR offsets go on ADC1 ranks 2 and 3 (`src/inc_encoder.cpp:488-498`).
+- **ADC2 injected = currents, 3-deep {IN5 dummy, IN5 il1, IN8 il2}, JEXTSEL = TIM1_CC4**
+  — the Q1 trigger, now programmed on ADC2 (same JEXTSEL table). Sequence time = 3 × 14
+  ADC cyc ≈ 3.5 µs (sequential, no dual parallelism), so load CCR4 for a ~3.6 µs lead so
+  rank 3 completes just before the serviced update event. Drop the dummy post-bench if it
+  proves clean. ProcessCurrents reads ADC2 ranks 2/3 (Q3 otherwise applies as written,
+  incl. software `ilofs[]` offsets); offset calibration runs via ADC2 JSWSTART before the
+  TIM1_CC4 trigger is enabled.
+- **SINCOS mode** (`GetAngleSinCos`, software JSWSTART per ISR, `src/inc_encoder.cpp:571`)
+  restructures the same way: ADC1-only sequence, start ADC1, read ranks 2/3.
+
+**Costs (small, quantifiable):**
+
+- *Intra-pair skew, currents:* il1/il2 convert 1.17 µs apart instead of simultaneously.
+  At the ripple apex the ripple slope reverses (that is the point of midpoint sampling),
+  so the skew error is fundamental-slope only: ≈0.3 A at 300 A/100 Hz — noise-floor
+  irrelevant next to the tens-of-amps aliasing being removed.
+- *Intra-pair skew, resolver:* cos samples 1.17 µs after sin → systematic,
+  speed-proportional angle error ≈0.3° electrical at 10 krpm (resolver elec = 4 × mech
+  [VERIFY respolepairs per the T14 baseline]). Folds into `syncadv` if it ever matters.
+
+**Gates — two register-level [VERIFY]s, both cheap bench tests, both blocking:**
+
+1. **RSM injected independence.** RM0008 documents the *combined* injected-simultaneous
+   modes explicitly but is thin on injected behaviour under DUALMOD=0110. Verify on the
+   bench that with RSM set, ADC2's injected group fires on its own TIM1_CC4 (and only
+   that), ADC1's on TIM3_CC4 (and only that), and no JDR cross-contamination occurs. If
+   this fails, Option C is dead and Option A stands.
+2. **Regular-scan integrity under one-sided injected interruption.** Injected conversions
+   pre-empt the regular scan per-ADC. Under RSM a currents-only injected burst stalls
+   ADC2's regular conversion while ADC1's completes, so the DMA-read packed DR word can
+   carry a one-slot-stale ADC2 half. Expected impact: one stale housekeeping sample
+   (temps/throttle/udc are slow and median-filtered) — but confirm the packing is *stale*,
+   not *corrupt*, with a long-run AnaIn plausibility check on all ADC2-half channels.
+
+### Recommendation (revised 15 Jul 2026)
+
+**Run the two Option C gate checks first** — they are an afternoon of register pokes on
+the bench, before any control code moves. **If both pass, implement Option C as the
+first cut**: it has no time-share machinery, no JEOC ISR, no ownership guard, no
+`syncadv` re-tune, and leaves excitation untouched — strictly less risk than A and B on
+every axis this doc scored them. **If gate 1 fails, fall back to Option A** as originally
+recommended (its analysis below is unchanged). Option B is parked: its payoff was
+shedding Option A's per-cycle machinery, which Option C already has none of; it would
+only resurface if simultaneous sin/cos sampling proves necessary (gate: the 0.3°-elec
+skew error visibly degrading angle quality on the bench).
+
 Rejected outright: moving either consumer to ADC3 (pins don't map) or to the regular group
 (free-running/DMA-owned by AnaIn, can't be phase-triggered without evicting the other 8
 channels).
@@ -190,7 +260,8 @@ channels).
 
 **ProcessCurrents** (`src/pwmgeneration-foc.cpp:234-257`): replace the two
 `GetCurrent(AnaIn::ilX,…)` reads with reads of the injected data registers —
-`adc_read_injected(ADC1, rank)` for il1, `adc_read_injected(ADC2, rank)` for il2 — keeping
+`adc_read_injected(ADC1, rank)` for il1, `adc_read_injected(ADC2, rank)` for il2 under
+Options A/B; ADC2 ranks 2/3 under Option C — keeping
 the identical `offset`/`gain` math from `GetCurrent` (`src/pwmgeneration.cpp:357-362`) and
 the existing `pinswap`/`ParkClarke` and `Param::SetFixed` tail. The median-of-3
 (`libopeninv/src/anain.cpp:117-118`) is dropped by design: a midpoint-synchronous sample
@@ -278,6 +349,11 @@ upstream story — the sync path is fork policy, not forced on all users.
   bookkeeping.
 - **Open:** Option B carrier integrity — can a TIM1-synchronous edge preserve the 4.4 kHz
   excitation cleanly enough that `resolverMax-resolverMin` margin is unchanged? Bench
-  question, gates the A→B graduation.
+  question, gates the A→B graduation (moot unless Option C's gate 1 fails *and* A is
+  later graduated).
+- **[VERIFY, blocks Option C]** RM0008 DUALMOD=RSM injected independence — see Option C
+  gate 1. Bench register test, no control code required.
+- **[VERIFY, blocks Option C]** Regular-scan staleness (not corruption) under one-sided
+  injected pre-emption in RSM — see Option C gate 2.
 - **Confirmed not a blocker:** ADC throughput (1.17 µs/conversion vs 113.8 µs period) and
   the dual-mode wiring (CRSISM already active, il1/sin on master, il2/cos on slave).
