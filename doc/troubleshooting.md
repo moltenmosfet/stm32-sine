@@ -113,7 +113,7 @@ Throttle path is `VehicleControl::GetUserThrottleCommand` →
   please stop before loading!" (or the equivalent for `load`). Run `stop`
   first.
 - **This fork fixed a bug where `defaults` didn't actually apply the
-  values it loaded** (F18 in [`../FORK_NOTES.md`](../FORK_NOTES.md)): the
+  values it loaded** (F18 in [`../FORK_NOTES.md`](https://github.com/moltenmosfet/stm32-sine/blob/fixes/FORK_NOTES.md)): the
   terminal `defaults` command now calls `Param::Change(PARAM_LAST)` after
   resetting values, mirroring what `load`/the SDO path already did. On
   unpatched upstream firmware, `defaults` silently has no effect until an
@@ -122,7 +122,7 @@ Throttle path is `VehicleControl::GetUserThrottleCommand` →
 ## Fork-specific notes
 
 Nothing in this fork is hardware-validated yet. Every fix listed in
-[`../FORK_NOTES.md`](../FORK_NOTES.md) is host-tested (`cd test && make &&
+[`../FORK_NOTES.md`](https://github.com/moltenmosfet/stm32-sine/blob/fixes/FORK_NOTES.md) is host-tested (`cd test && make &&
 ./test_sine`) and compile-checked for both `CONTROL=SINE` and
 `CONTROL=FOC`, but none of it has run on a real board — the dyno hardware
 this fork was built for is still being assembled. Treat behavior around

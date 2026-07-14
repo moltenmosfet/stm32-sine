@@ -2,7 +2,7 @@
 
 This is a reference for every user-settable parameter and read-only spot
 value exposed by this firmware. It is generated from
-[`include/param_prj.h`](../include/param_prj.h) at commit `8052200` on the
+[`include/param_prj.h`](https://github.com/moltenmosfet/stm32-sine/blob/fixes/include/param_prj.h) at commit `8052200` on the
 `fixes` branch (this fork of jsphuebner/stm32-sine), and reflects that file
 exactly — if you add or change a parameter, regenerate this doc.
 

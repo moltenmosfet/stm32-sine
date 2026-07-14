@@ -52,7 +52,7 @@ Drawbacks, Architecture.
 ## Conventions
 
 Every behavioral claim in these docs traces to the code, the README, or
-[FORK_NOTES.md](../FORK_NOTES.md); where the code doesn't answer a question,
+[FORK_NOTES.md](https://github.com/moltenmosfet/stm32-sine/blob/fixes/FORK_NOTES.md); where the code doesn't answer a question,
 the docs link to https://openinverter.org/docs or the
 [openinverter forum](https://openinverter.org/forum) instead of guessing.
 Fork-added behavior is always marked as such — nothing in this fork is

@@ -1,0 +1,60 @@
+site_name: stm32-sine
+site_description: Firmware documentation for the moltenmosfet bug-fix fork of stm32-sine
+site_url: https://moltenmosfet.github.io/stm32-sine/
+repo_url: https://github.com/moltenmosfet/stm32-sine
+repo_name: moltenmosfet/stm32-sine
+edit_uri: edit/fixes/doc/
+docs_dir: doc
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+    - content.action.edit
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+nav:
+  - Home: README.md
+  - User guides:
+      - Overview: overview.md
+      - Getting started: getting-started.md
+      - Parameter reference: parameters.md
+      - Troubleshooting: troubleshooting.md
+  - Module reference:
+      - Entry point & architecture: stm32_sine.md
+      - PWM generation (SINE/FOC): pwmgeneration.md
+      - Encoder: inc_encoder.md
+      - Vehicle control: vehiclecontrol.md
+      - Throttle: throttle.md
+      - Anti-cogging: anticog.md
+      - Q-axis clamp (fork): qclamp.md
+      - Regen taper hold (fork): regentaperhold.md
+      - CAN SDO: invertersdo.md
+      - Terminal: terminal.md
+      - Temperature measurement: temp_meas.md
+      - Hardware init: hwinit.md
+      - Host test suite: host-tests.md

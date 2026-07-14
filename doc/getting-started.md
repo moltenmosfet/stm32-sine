@@ -187,5 +187,5 @@ This exercises the control classes with no hardware: PI controller, FOC
 math, CAN filter packing, scheduler overrun logic, throttle, anti-cogging,
 q-axis clamp, regen taper hold, and more (see `test/test_*.cpp`). CI runs
 this alongside both firmware builds — see
-[`../FORK_NOTES.md`](../FORK_NOTES.md) for the fork's verification
+[`../FORK_NOTES.md`](https://github.com/moltenmosfet/stm32-sine/blob/fixes/FORK_NOTES.md) for the fork's verification
 convention.

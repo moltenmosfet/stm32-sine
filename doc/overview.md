@@ -53,8 +53,8 @@ https://openinverter.org/docs.
 `stm32-sine` here is a bug-fix fork of upstream jsphuebner/stm32-sine. A
 source-level review of the FOC control path, the CAN/SDO stack, the
 scheduler, and the SINE build produced 24 findings; all 24 have been fixed on
-the `fixes` integration branch. See [`../README.md`](../README.md) for the
-fork summary and [`../FORK_NOTES.md`](../FORK_NOTES.md) for the full findings
+the `fixes` integration branch. See [`../README.md`](https://github.com/moltenmosfet/stm32-sine/blob/fixes/README.md) for the
+fork summary and [`../FORK_NOTES.md`](https://github.com/moltenmosfet/stm32-sine/blob/fixes/FORK_NOTES.md) for the full findings
 glossary and per-task rationale.
 
 The fork adds no new control behavior of its own. The only dyno-specific
