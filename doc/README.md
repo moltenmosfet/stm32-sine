@@ -1,0 +1,59 @@
+# Documentation
+
+In-repo documentation for this firmware. The ecosystem-wide guide (hardware,
+wiring, board setup) lives at https://openinverter.org/docs — these docs cover
+what the code itself can answer.
+
+## User guides
+
+Start here:
+
+- [overview.md](overview.md) — aim of the project, the SINE vs FOC build
+  variants, inverter charging, supported hardware, how this fork relates to
+  upstream.
+- [getting-started.md](getting-started.md) — toolchain, build (including the
+  `CONTROL=` clean-build gotcha), flashing, terminal commands, the
+  opmode/start-stop model, minimum parameters before first spin, safety notes,
+  running the host test suite.
+- [parameters.md](parameters.md) — full reference for all settable parameters
+  and read-only spot values, per category, with units/ranges/defaults,
+  code-grounded hints, and fork-added parameters flagged.
+- [troubleshooting.md](troubleshooting.md) — every fault code with its actual
+  trigger condition and what to check, plus common bring-up failures (motor
+  won't start, no throttle response, encoder issues).
+
+## Module reference
+
+Per-module docs for reading or changing the code. Each follows the same
+template: Description (public interface, parameters consumed), Why?,
+Drawbacks, Architecture.
+
+- [stm32_sine.md](stm32_sine.md) — firmware entry point, boot sequence,
+  scheduler tasks, parameter application; includes the top-level module map.
+- [pwmgeneration.md](pwmgeneration.md) — PWM/current-loop core and the
+  SINE/FOC variant split.
+- [inc_encoder.md](inc_encoder.md) — rotor position/speed from incremental
+  encoders, resolvers, SPI and SinCos sensors.
+- [vehiclecontrol.md](vehiclecontrol.md) — throttle/UDC/temperature
+  processing, direction, cruise, CAN control frames.
+- [throttle.md](throttle.md) — throttle math: ramps, limiters, regen curves.
+- [anticog.md](anticog.md) — anti-cogging feedforward.
+- [qclamp.md](qclamp.md) — low-speed q-axis clamp policy (fork-added,
+  `qlimfrq`).
+- [regentaperhold.md](regentaperhold.md) — regen taper through the standstill
+  deadband (fork-added).
+- [invertersdo.md](invertersdo.md) — CAN SDO interface and the CAN dbc file.
+- [terminal.md](terminal.md) — serial terminal command set.
+- [temp_meas.md](temp_meas.md) — temperature sensor lookup tables.
+- [hwinit.md](hwinit.md) — hardware-variant detection, clocks, pin mapping.
+- [host-tests.md](host-tests.md) — the native host test suite (fork-added):
+  what it covers, how to run it, what it stubs.
+
+## Conventions
+
+Every behavioral claim in these docs traces to the code, the README, or
+[FORK_NOTES.md](../FORK_NOTES.md); where the code doesn't answer a question,
+the docs link to https://openinverter.org/docs or the
+[openinverter forum](https://openinverter.org/forum) instead of guessing.
+Fork-added behavior is always marked as such — nothing in this fork is
+hardware-validated yet (host-tested and compile-checked only).

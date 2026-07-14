@@ -31,6 +31,9 @@ upstream's pin and is not forked.
 Nothing in this fork is bench-validated on hardware yet (the dyno hardware is
 still being built). Changes are host-tested and compile-checked only.
 
+In-repo documentation is in [doc/](doc/README.md): overview, getting started,
+full parameter reference, troubleshooting, and a per-module reference.
+
 ## Fixes in this fork
 
 - **Low-speed / low-torque control quality** — the PI controller's integral
