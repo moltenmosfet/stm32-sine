@@ -59,6 +59,11 @@ uint16_t PwmGeneration::GetAngle()
    return angle;
 }
 
+int PwmGeneration::GetOpmode()
+{
+   return opmode;
+}
+
 bool PwmGeneration::Tripped()
 {
    return tripped;
@@ -149,6 +154,14 @@ void PwmGeneration::SetOpmode(int _opmode)
          ConfigureChargeController();
          break;
       case MOD_MANUAL:
+#if CONTROL == CTRL_FOC
+         //Bench-commissioning test modes (testmode param) dispatch from
+         //MOD_MANUAL via pwm_timer_isr -> TestModeRun(); see InitTestMode()
+         //in pwmgeneration-foc.cpp. SINE has no test-mode state machine and
+         //falls through to the plain EnableOutput() below, same as before.
+         InitTestMode();
+         __attribute__((fallthrough));
+#endif
       case MOD_RUN:
       case MOD_SINE:
          EnableOutput();
@@ -182,7 +195,18 @@ extern "C" void pwm_timer_isr(void)
    /* Clear interrupt pending flag */
    timer_clear_flag(PWM_TIMER, TIM_SR_UIF);
 
+#if CONTROL == CTRL_FOC
+   //testmode dispatch (B2): MOD_MANUAL runs the bench-commissioning test
+   //state machine instead of the normal control loop. SINE has no
+   //test-mode state machine, so it always runs Run() (MOD_MANUAL is
+   //handled inside pwmgeneration-sine.cpp's Run() there, unchanged).
+   if (MOD_MANUAL == PwmGeneration::GetOpmode())
+      PwmGeneration::TestModeRun();
+   else
+      PwmGeneration::Run();
+#else
    PwmGeneration::Run();
+#endif
 
    int time = timer_get_counter(PWM_TIMER) - start;
 
@@ -450,6 +474,8 @@ uint16_t PwmGeneration::TimerSetup(uint16_t deadtime, bool activeLow)
    timer_set_repetition_counter(PWM_TIMER, repCounters[pwmdigits - MIN_PWM_DIGITS]);
 
    timer_generate_event(PWM_TIMER, TIM_EGR_UG);
+
+   timer_disable_break_main_output(PWM_TIMER); //no PWM until enabled in ISR
 
    timer_enable_counter(PWM_TIMER);
 

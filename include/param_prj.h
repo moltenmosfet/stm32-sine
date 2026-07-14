@@ -24,8 +24,8 @@
    2. Temporary parameters
    3. Display values
  */
-//Next param id (increase when adding new parameter!): 167
-//Next value Id: 2058
+//Next param id (increase when adding new parameter!): 172
+//Next value Id: 2061
 /*              category     name         unit       min     max     default id */
 
 #define MOTOR_PARAMETERS_COMMON \
@@ -232,6 +232,9 @@
     VALUE_ENTRY(uq,      "dig",   2047 ) \
     VALUE_ENTRY(uexc,    "dig",   2056 ) \
     VALUE_ENTRY(anticog, "dig",   2055 ) \
+    VALUE_ENTRY(testangle,   "°", 2058 ) \
+    VALUE_ENTRY(syncoferr,   "",  2059 ) \
+    VALUE_ENTRY(syncoferrav, "",  2060 ) \
 
 #if CONTROL == CTRL_SINE
 #define PARAM_LIST \
@@ -266,6 +269,11 @@
     AUTOMATION_CONTACT_PWM_COMM_PARAMETERS \
     TESTP_ENTRY(CAT_TEST,    manualiq,    "A",       -400,   400,    0,      151 ) \
     TESTP_ENTRY(CAT_TEST,    manualid,    "A",       -400,   400,    0,      152 ) \
+    TESTP_ENTRY(CAT_TEST,    testmode,    TESTMODES, 0,      4,      0,      167 ) \
+    TESTP_ENTRY(CAT_TEST,    maxtestud,   "V",       1,      100,    10,     168 ) \
+    TESTP_ENTRY(CAT_TEST,    mintesti,    "A",       1,      50,     15,     169 ) \
+    TESTP_ENTRY(CAT_TEST,    maxtesti,    "A",       1,      100,    40,     170 ) \
+    TESTP_ENTRY(CAT_TEST,    testdetlev,  "",        10,     1000,   200,    171 ) \
     VALUE_BLOCK1 \
     VALUES_FOC \
     VALUE_BLOCK2 \
@@ -274,6 +282,7 @@
 
 /***** Enum String definitions *****/
 #define OPMODES      "0=Off, 1=Run, 2=ManualRun, 3=Boost, 4=Buck, 5=Sine, 6=AcHeat"
+#define TESTMODES    "0=Off, 1=Resolver, 2=PhaseCheck, 3=ForwardTestSpin, 4=BidirTestSpin"
 #define PWMFRQS      "0=17.6kHz, 1=8.8kHz, 2=4.4KHz"
 #define PWMPOLS      "0=ActHigh, 1=ActLow"
 #define DIRS         "-1=Reverse, 0=Neutral, 1=Forward"
@@ -382,6 +391,18 @@ enum _modes
    MOD_SINE,
    MOD_ACHEAT,
    MOD_LAST
+};
+
+//Bench-commissioning test modes (FOC only), driven by PwmGeneration::TestModeRun
+//via opmode==MOD_MANUAL. See src/pwmgeneration-foc.cpp.
+enum _testmodes
+{
+   TEST_OFF=0,
+   TEST_RESLV,
+   TEST_PHASE,
+   TEST_SPINF,
+   TEST_SPINBIDIR,
+   TEST_LAST
 };
 
 enum _tripmodes
