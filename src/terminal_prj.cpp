@@ -36,6 +36,9 @@ static void StopInverter(Terminal* term, char *arg);
 static void StartInverter(Terminal* term, char *arg);
 static void PrintSerial(Terminal* term, char *arg);
 static void PrintErrors(Terminal* term, char *arg);
+#if CONTROL == CTRL_FOC
+static void PrintTestResult(Terminal* term, char *arg);
+#endif
 
 extern "C" const TERM_CMD TermCmds[] =
 {
@@ -54,6 +57,9 @@ extern "C" const TERM_CMD TermCmds[] =
   { "start", StartInverter },
   { "serial", PrintSerial },
   { "errors", PrintErrors },
+  #if CONTROL == CTRL_FOC
+  { "testres", PrintTestResult },
+  #endif
   { NULL, NULL }
 };
 
@@ -109,4 +115,13 @@ static void PrintSerial(Terminal* , char *)
 {
    printf("%X:%X:%X\r\n", DESIG_UNIQUE_ID2, DESIG_UNIQUE_ID1, DESIG_UNIQUE_ID0);
 }
+
+#if CONTROL == CTRL_FOC
+static void PrintTestResult(Terminal* , char *)
+{
+   //B2: prints the PhaseCheck verdict string (or the current testResult
+   //pointer for other test modes); see PwmGeneration::GetTestResult().
+   printf("%s", PwmGeneration::GetTestResult());
+}
+#endif // CONTROL == CTRL_FOC
 

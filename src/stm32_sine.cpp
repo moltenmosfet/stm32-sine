@@ -194,7 +194,21 @@ static void Ms10Task(void)
       else if (Param::GetBool(Param::din_start) || Param::GetBool(Param::manualstart) ||
               (Param::GetInt(Param::tripmode) == TRIP_AUTORESUME && PwmGeneration::Tripped()))
       {
-         newMode = MOD_RUN;
+         #if CONTROL == CTRL_FOC
+         //Bench test-mode entry (B2): only the manualstart software switch
+         //can start MOD_MANUAL, only when a testmode is actually selected,
+         //and never when the physical din_start input is asserted -- that
+         //always means MOD_RUN, even if manualstart/testmode also happen
+         //to be set. TRIP_AUTORESUME never routes here either, it's not
+         //part of this condition. MOD_MANUAL rides the exact same
+         //contactor/dcsw/precharge path below as MOD_RUN; the two modes
+         //only diverge inside PwmGeneration::SetOpmode.
+         if (!Param::GetBool(Param::din_start) && Param::GetBool(Param::manualstart) &&
+             Param::GetInt(Param::testmode) != TEST_OFF)
+            newMode = MOD_MANUAL;
+         else
+         #endif // CONTROL == CTRL_FOC
+            newMode = MOD_RUN;
          Param::SetInt(Param::manualstart, 0);
       }
       stt |= opmode != MOD_OFF ? STAT_NONE : STAT_WAITSTART;

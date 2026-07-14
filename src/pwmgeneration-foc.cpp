@@ -578,9 +578,19 @@ void PwmGeneration::TestModeRun()
             testAngle+=2;
          else
             testAngle-=2;
-         if(((SINLU_ONEREV-1) == testAngle) || (0 == testAngle))
+         //Upstream compared against SINLU_ONEREV-1 (65535, odd) as the far
+         //wrap endpoint, but testAngle starts at 0 and always steps by +-2,
+         //so it is always even -- that comparison could never be true, and
+         //the branch below always took the "if" path, silently overwriting
+         //halfSyncErrAv every 0-crossing instead of ever publishing
+         //syncoferrav. Both the forward wrap-through-the-top and the
+         //backward count-down-to-zero land exactly on testAngle==0, so
+         //branch on dirForward (before it flips below) instead: forward
+         //finishing its pass records the half, backward finishing its pass
+         //publishes the average of the two.
+         if(0 == testAngle)
          {
-            if((0 == testAngle))
+            if(dirForward)
                halfSyncErrAv = syncErrorSum>>16; //note 32768 points per pass so this also divides by 2
             else
                Param::SetInt(Param::syncoferrav,(int32_t)((uint16_t)((syncErrorSum>>16) + halfSyncErrAv))); //use average of the two
@@ -605,6 +615,7 @@ void PwmGeneration::TestModeRun()
 
    s32fp idc = (iq * uq + id * ud) / FOC::GetMaximumModulationIndex();
    idc = FP_MUL(idc, dcCurFac);
+   Param::SetFixed(Param::idc, idc); //DC current visibility on the bench, mirrors Run()
 
    uint32_t amp = FOC::GetTotalVoltage(ud, uq);
 
