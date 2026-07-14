@@ -31,10 +31,11 @@ upstream's pin and is not forked.
 Nothing in this fork is bench-validated on hardware yet (the dyno hardware is
 still being built). Changes are host-tested and compile-checked only.
 
-**Documentation: https://moltenmosfet.github.io/stm32-sine/** — overview,
-getting started, full parameter reference, troubleshooting, and a per-module
-reference. AI-generated (Claude Code, Fable 5) and not yet human-verified;
-the Markdown source lives in [doc/](doc/README.md).
+## Documentation: 
+[Documentation can be found here](https://moltenmosfet.github.io/stm32-sine/)
+
+Original project documentation: [openinverter.org/docs](https://openinverter.org/docs)
+and the [openinverter wiki](https://openinverter.org/wiki/).
 
 ## Fixes in this fork
 
