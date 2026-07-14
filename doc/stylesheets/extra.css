@@ -1,0 +1,12 @@
+/* AI-generation disclosure bar: bright amber so it can't be mistaken
+   for browser chrome or the page header. */
+.md-banner {
+  background-color: #ffc105;
+  color: #1f1f1f;
+  font-weight: 600;
+}
+
+.md-banner code {
+  background-color: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
