@@ -31,8 +31,10 @@ upstream's pin and is not forked.
 Nothing in this fork is bench-validated on hardware yet (the dyno hardware is
 still being built). Changes are host-tested and compile-checked only.
 
-In-repo documentation is in [doc/](doc/README.md): overview, getting started,
-full parameter reference, troubleshooting, and a per-module reference.
+**Documentation: https://moltenmosfet.github.io/stm32-sine/** — overview,
+getting started, full parameter reference, troubleshooting, and a per-module
+reference. AI-generated (Claude Code, Fable 5) and not yet human-verified;
+the Markdown source lives in [doc/](doc/README.md).
 
 ## Fixes in this fork
 
