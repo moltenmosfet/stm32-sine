@@ -224,31 +224,62 @@ time-sharing at all**:
   speed-proportional angle error ≈0.3° electrical at 10 krpm (resolver elec = 4 × mech
   [VERIFY respolepairs per the T14 baseline]). Folds into `syncadv` if it ever matters.
 
-**Gates — two register-level [VERIFY]s, both cheap bench tests, both blocking:**
+**Gates — RESOLVED on the bench, 16 Jul 2026** (Blue Pill F103C8, firmware-identical
+fabric: 72 MHz, ADCCLK 12 MHz, TIM1 center-aligned 2048/RCR 3, dual-ADC; test rig in
+`bench/adc-gate-tests/`, PA5 pinned to 3V3 and PB0 to GND as channel markers):
 
-1. **RSM injected independence.** RM0008 documents the *combined* injected-simultaneous
-   modes explicitly but is thin on injected behaviour under DUALMOD=0110. Verify on the
-   bench that with RSM set, ADC2's injected group fires on its own TIM1_CC4 (and only
-   that), ADC1's on TIM3_CC4 (and only that), and no JDR cross-contamination occurs. If
-   this fails, Option C is dead and Option A stands.
-2. **Regular-scan integrity under one-sided injected interruption.** Injected conversions
-   pre-empt the regular scan per-ADC. Under RSM a currents-only injected burst stalls
-   ADC2's regular conversion while ADC1's completes, so the DMA-read packed DR word can
-   carry a one-slot-stale ADC2 half. Expected impact: one stale housekeeping sample
-   (temps/throttle/udc are slow and median-filtered) — but confirm the packing is *stale*,
-   not *corrupt*, with a long-run AnaIn plausibility check on all ADC2-half channels.
+1. **RSM injected independence: PASS, decisive.** With DUALMOD=RSM, ADC1's injected
+   group fired only on TIM3_CC4 (2000/2 s at a 1 kHz trigger) and ADC2's only on
+   TIM1_CC4 (35 157/2 s at 17.578 kHz PWM); killing either trigger silenced only its
+   own group (residual counts were exactly the ~15 ms semihosting print latency at each
+   phase boundary). No JDR cross-contamination: ADC2's injected readings sat pinned at
+   4092–4095 / 0 through millions of conversions.
+2. **Regular-scan integrity: FAIL for the dual-packed scan — and worse than the stale
+   hypothesis.** Baseline (no injected activity): 7.7 M packed-word samples, zero
+   pairing errors — RSM regulars lock step perfectly on their own. But with *either*
+   ADC's injected group pre-empting, the ADC2 half of the packed word carried the
+   **neighboring channel's value** ~45–54 % of the time, in continuous wrong-channel
+   runs up to ~2 ms. Mechanism: the DMA word is paced by ADC1's EOC while a one-sided
+   injected abort/restart slips the two regular sequencers against each other — so
+   this is cross-channel substitution (e.g. `udc` reading a temperature), not
+   stale-but-correct data. The ADC1 half stayed self-consistent throughout (it is
+   paced by its own EOC).
 
-### Recommendation (revised 15 Jul 2026)
+**Consequence — Option C is viable only as "C.1": single-ADC regular scan.** Move all
+AnaIn housekeeping channels onto ADC1's regular group alone (16-bit DMA from ADC1_DR,
+one sequence — they fit; scan rate halves, irrelevant for temps/throttle/udc), leaving
+ADC2 with the injected current pair only. With no dual packing there is no pairing to
+scramble — single-ADC injected pre-emption aborts and restarts the interrupted regular
+conversion with no slot slip (bench: ADC1's half never mis-slotted even with its own
+1 kHz injected pre-emption running). Note this failure mode is also why upstream's
+CRSISM works today: injected-simultaneous pre-empts BOTH regular scans together, so
+pairing survives — any design that splits the injected triggers must also unsplit the
+regular packing.
 
-**Run the two Option C gate checks first** — they are an afternoon of register pokes on
-the bench, before any control code moves. **If both pass, implement Option C as the
-first cut**: it has no time-share machinery, no JEOC ISR, no ownership guard, no
-`syncadv` re-tune, and leaves excitation untouched — strictly less risk than A and B on
-every axis this doc scored them. **If gate 1 fails, fall back to Option A** as originally
-recommended (its analysis below is unchanged). Option B is parked: its payoff was
-shedding Option A's per-cycle machinery, which Option C already has none of; it would
-only resurface if simultaneous sin/cos sampling proves necessary (gate: the 0.3°-elec
-skew error visibly degrading angle quality on the bench).
+**Bench bonuses (same run):**
+- The TIM1_CC4 injected trigger fires **once per PWM period** (rising edge of OC4REF),
+  not twice per compare match — Q1's "CC4 matches twice, mind the RCR interaction"
+  concern is retired; pick the slope via PWM1/PWM2 polarity.
+- The serviced update event landed at the counter **top** (DIR read down-counting in
+  17 578 of 17 578 update ISRs). Caveat: the rig did not replicate `TimerSetup`'s
+  `TIM_EGR_UG` kick, so the RCR phase alignment may differ in-firmware — re-run the
+  DIR-read-in-ISR check (it transfers as-is) during commissioning before trusting the
+  CCR4 placement.
+- Trigger→data-ready ≈ 3 µs measured including ISR/read latency (hardware conversion
+  pair is 2.33 µs at 1.5 cyc sampling) — the Q1 CCR4 lead-time numbers hold.
+
+### Recommendation (revised 16 Jul 2026, post-bench)
+
+**Implement Option C.1**: independent injected triggers under RSM (gate 1 passed
+decisively) **plus** the single-ADC regular scan (mandatory — gate 2 showed the
+dual-packed scan substitutes neighboring channels' values under one-sided injected
+pre-emption). The AnaIn restructure is the one real cost Option C gained from the
+bench: channel table collapses to ADC1, DMA transfer width drops to 16 bit, scan rate
+halves (harmless for housekeeping). In exchange, everything the 15 Jul revision
+promised still holds: no time-share machinery, no JEOC ISR, no ownership guard, no
+`syncadv` re-tune, excitation untouched. **Option A remains the fallback only if the
+AnaIn rework is rejected** (e.g. for upstream-patch minimalism — note Option A keeps
+CRSISM and therefore keeps the dual scan safe). Option B stays parked as before.
 
 Rejected outright: moving either consumer to ADC3 (pins don't map) or to the regular group
 (free-running/DMA-owned by AnaIn, can't be phase-triggered without evicting the other 8
@@ -351,9 +382,9 @@ upstream story — the sync path is fork policy, not forced on all users.
   excitation cleanly enough that `resolverMax-resolverMin` margin is unchanged? Bench
   question, gates the A→B graduation (moot unless Option C's gate 1 fails *and* A is
   later graduated).
-- **[VERIFY, blocks Option C]** RM0008 DUALMOD=RSM injected independence — see Option C
-  gate 1. Bench register test, no control code required.
-- **[VERIFY, blocks Option C]** Regular-scan staleness (not corruption) under one-sided
-  injected pre-emption in RSM — see Option C gate 2.
+- ~~[VERIFY, blocks Option C]~~ **RESOLVED 16 Jul 2026:** RSM injected independence
+  PASSED; regular-scan integrity FAILED for the dual-packed scan (cross-channel
+  substitution, not staleness) → Option C requires the C.1 single-ADC regular scan.
+  Bench data and rig: Option C section + `bench/adc-gate-tests/`.
 - **Confirmed not a blocker:** ADC throughput (1.17 µs/conversion vs 113.8 µs period) and
   the dual-mode wiring (CRSISM already active, il1/sin on master, il2/cos on slave).
