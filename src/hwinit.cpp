@@ -193,7 +193,14 @@ HWREV io_setup()
    switch (hwRev)
    {
       case HW_REV1:
+#ifdef SYNC_CURRENT_SAMPLING
+         //HW_REV1 relocates il2 to PA6 (ADC12_IN6), which collides with the
+         //resolver sin channel on ADC1's injected sequence under Option C.1
+         //(doc_sync_sampling_design.md) -- not supported. HW_REV1 boards
+         //must build without SYNC_CURRENT_SAMPLING.
+#else
          AnaIn::il2.Configure(GPIOA, 6);
+#endif
          break;
       case HW_PRIUS:
          DigIo::emcystop_in.Configure(GPIOC, GPIO7, PinMode::INPUT_PU);
@@ -215,6 +222,44 @@ HWREV io_setup()
 
    return hwRev;
 }
+
+#ifdef SYNC_CURRENT_SAMPLING
+/**
+* C1 (doc_sync_sampling_design.md, Option C.1): power up and arm ADC2's
+* injected group as the dedicated phase-current sampler. AnaIn::Start() only
+* powers/calibrates ADC1 when SYNC_CURRENT_SAMPLING is defined (ADC_COUNT==1,
+* see anain_prj.h), so ADC2 needs its own reset-cal/calibrate dance here,
+* mirroring the one in libopeninv/src/anain.cpp AnaIn::Start(). Scan mode
+* must be enabled explicitly too -- ADC2 no longer gets it for free from
+* AnaIn's regular-scan setup.
+*
+* Sequence is {IN5 dummy, IN5 il1, IN8 il2}: the leading dummy sample
+* absorbs the noisy-first-conversion effect (same convention as
+* Encoder::InitResolverMode's sin/cos dummy). Trigger is TIM1_CC4 (Q1),
+* now programmed on ADC2 directly since DUALMOD stays at its reset value
+* (independent mode) -- there is no ADC1 master to inherit it from.
+*/
+void sync_current_sampling_setup(void)
+{
+   uint8_t channels[3] = { 5, 5, 8 };
+
+   gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_ANALOG, GPIO5); //il1
+   gpio_set_mode(GPIOB, GPIO_MODE_INPUT, GPIO_CNF_INPUT_ANALOG, GPIO0); //il2
+
+   adc_power_off(ADC2);
+   adc_enable_scan_mode(ADC2);
+   adc_power_on(ADC2);
+   //tSTAB after power-on before calibration (RM0008 14.3)
+   for (volatile int i = 0; i < 1000; i++);
+   adc_reset_calibration(ADC2);
+   adc_calibrate(ADC2);
+
+   adc_set_injected_sequence(ADC2, sizeof(channels), channels);
+   adc_set_sample_time(ADC2, 5, ADC_SMPR_SMP_1DOT5CYC);
+   adc_set_sample_time(ADC2, 8, ADC_SMPR_SMP_1DOT5CYC);
+   adc_enable_external_trigger_injected(ADC2, ADC_CR2_JEXTSEL_TIM1_CC4);
+}
+#endif // SYNC_CURRENT_SAMPLING
 
 uint16_t pwmio_setup(bool activeLow)
 {

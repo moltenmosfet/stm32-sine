@@ -32,6 +32,9 @@
 #include "picontroller.h"
 #include "qclamp.h"
 #include "anticog.h"
+#ifdef SYNC_CURRENT_SAMPLING
+#include "hwinit.h"
+#endif
 
 #define FRQ_TO_ANGLE(frq) FP_TOINT((frq << SineCore::BITS) / pwmfrq)
 #define DIGIT_TO_DEGREE(a) FP_FROMINT(angle) / (65536 / 360)
@@ -216,6 +219,9 @@ void PwmGeneration::PwmInit()
 {
    int32_t maxVd = FOC::GetMaximumModulationIndex() - 1000;
    pwmfrq = TimerSetup(Param::GetInt(Param::deadtime), Param::GetInt(Param::pwmpol));
+#ifdef SYNC_CURRENT_SAMPLING
+   sync_current_sampling_setup();
+#endif
    Encoder::SetPwmFrequency(pwmfrq);
    initwait = pwmfrq / 2; //0.5s
    qController.ResetIntegrator();
@@ -238,8 +244,13 @@ s32fp PwmGeneration::ProcessCurrents(s32fp& id, s32fp& iq)
       initwait--;
    }
 
+#ifdef SYNC_CURRENT_SAMPLING
+   s32fp il1 = GetCurrent(GetPhaseCurrentRaw(0), ilofs[0], Param::Get(Param::il1gain));
+   s32fp il2 = GetCurrent(GetPhaseCurrentRaw(1), ilofs[1], Param::Get(Param::il2gain));
+#else
    s32fp il1 = GetCurrent(AnaIn::il1, ilofs[0], Param::Get(Param::il1gain));
    s32fp il2 = GetCurrent(AnaIn::il2, ilofs[1], Param::Get(Param::il2gain));
+#endif
 
    if ((Param::GetInt(Param::pinswap) & SWAP_CURRENTS) > 0)
       FOC::ParkClarke(il2, il1);
@@ -280,8 +291,16 @@ void PwmGeneration::RunOffsetCalibration()
 
    if (samples < offsetSamples)
    {
+#ifdef SYNC_CURRENT_SAMPLING
+      //TIM1 is already running during initwait, so JDR refreshes every
+      //period -- plain injected reads suffice, no time-share machinery
+      //needed (Q3, software-offset choice (a)).
+      il1Avg += GetPhaseCurrentRaw(0);
+      il2Avg += GetPhaseCurrentRaw(1);
+#else
       il1Avg += AnaIn::il1.Get();
       il2Avg += AnaIn::il2.Get();
+#endif
       samples++;
    }
    else

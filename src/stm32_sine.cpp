@@ -243,7 +243,18 @@ static void Ms10Task(void)
    }
    else if (initWait == 10)
    {
+#ifndef SYNC_CURRENT_SAMPLING
       PwmGeneration::SetCurrentOffset(AnaIn::il1.Get(), AnaIn::il2.Get());
+#else
+      //C1: this early seed (from the free-running AnaIn scan, well before
+      //PwmInit's RunOffsetCalibration converges) is skipped here. ADC2's
+      //injected group isn't armed until PwmInit runs at initWait==0 (~100ms
+      //later, see hwinit.cpp sync_current_sampling_setup), so there is
+      //nothing valid to read yet -- and RunOffsetCalibration fully
+      //re-derives ilofs[] before PWM output is ever enabled (see
+      //pwmgeneration-foc.cpp Run(), the initwait>0 gate), so skipping this
+      //seed is a no-op in steady state, not a regression.
+#endif
       initWait--;
    }
    else if (initWait > 0)

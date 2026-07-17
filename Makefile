@@ -21,6 +21,7 @@ OUT_DIR  = obj
 PREFIX		?= arm-none-eabi
 CONTROL     ?= SINE
 CONTROLLC   := $(shell echo $(CONTROL) | tr A-Z a-z)
+SYNC_SAMPLING ?= 0
 BINARY		= stm32_$(CONTROLLC)
 SIZE  = $(PREFIX)-size
 CC		= $(PREFIX)-gcc
@@ -38,6 +39,14 @@ CPPFLAGS    = -Os -ggdb3 -Wall -Wextra -Iinclude/ -Ilibopeninv/include -Ilibopen
               -fno-common -std=c++11 -pedantic -DSTM32F1 -DT_DEBUG=$(TERMINAL_DEBUG) \
               -DCONTROL=CTRL_$(CONTROL) -DCTRL_SINE=0 -DCTRL_FOC=1 \
               -ffunction-sections -fdata-sections -fno-builtin -fno-rtti -fno-exceptions -fno-unwind-tables -mcpu=cortex-m3 -mthumb
+
+# Opt-in PWM-synchronous phase-current sampling via ADC2's injected group
+# (doc_sync_sampling_design.md, Option C.1). FOC-only; make clean between
+# variants, this variable is not tracked as a dependency.
+ifeq ($(SYNC_SAMPLING),1)
+CFLAGS      += -DSYNC_CURRENT_SAMPLING
+CPPFLAGS    += -DSYNC_CURRENT_SAMPLING
+endif
 
 # Check if the variable GITHUB_RUN_NUMBER exists. When running on the github actions running, this
 # variable is automatically available.

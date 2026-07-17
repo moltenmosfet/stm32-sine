@@ -18,6 +18,9 @@
  */
 #include <libopencm3/stm32/timer.h>
 #include <libopencm3/stm32/rcc.h>
+#ifdef SYNC_CURRENT_SAMPLING
+#include <libopencm3/stm32/adc.h>
+#endif
 #include "pwmgeneration.h"
 #include "hwdefs.h"
 #include "params.h"
@@ -310,8 +313,13 @@ void PwmGeneration::Charge()
    int pwmin = FP_TOINT((Param::Get(Param::chargepwmin) * (1 << pwmdigits)) / 100);
    int pwmax = FP_TOINT((Param::Get(Param::chargepwmax) * (1 << pwmdigits)) / 100);
 
+#ifdef SYNC_CURRENT_SAMPLING
+   s32fp il1 = GetCurrent(GetPhaseCurrentRaw(0), ilofs[0], Param::Get(Param::il1gain));
+   s32fp il2 = GetCurrent(GetPhaseCurrentRaw(1), ilofs[1], Param::Get(Param::il2gain));
+#else
    s32fp il1 = GetCurrent(AnaIn::il1, ilofs[0], Param::Get(Param::il1gain));
    s32fp il2 = GetCurrent(AnaIn::il2, ilofs[1], Param::Get(Param::il2gain));
+#endif
 
    il1 = ABS(il1);
    il2 = ABS(il2);
@@ -360,6 +368,29 @@ s32fp PwmGeneration::GetCurrent(AnaIn& input, s32fp offset, s32fp gain)
    il -= offset;
    return FP_DIV(il, gain);
 }
+
+#ifdef SYNC_CURRENT_SAMPLING
+//Same offset/gain math as GetCurrent(AnaIn&,...) above, for callers that
+//already have a raw ADC reading (Option C.1: no AnaIn object backs il1/il2
+//any more, see anain_prj.h).
+s32fp PwmGeneration::GetCurrent(uint16_t raw, s32fp offset, s32fp gain)
+{
+   s32fp il = FP_FROMINT(raw);
+   il -= offset;
+   return FP_DIV(il, gain);
+}
+
+/** Read a phase current straight off ADC2's injected group (Q1 trigger =
+ * TIM1_CC4, doc_sync_sampling_design.md Option C.1). Ranks 2/3 hold
+ * il1/il2; rank 1 is the noisy-first-sample dummy (see
+ * hwinit.cpp sync_current_sampling_setup). No median-of-3: a
+ * PWM-synchronous sample needs no outlier rejection (Q3).
+ * @param index 0 = il1, 1 = il2 */
+uint16_t PwmGeneration::GetPhaseCurrentRaw(int index)
+{
+   return adc_read_injected(ADC2, index + 2);
+}
+#endif // SYNC_CURRENT_SAMPLING
 
 /**
 * Setup main PWM timer
@@ -448,6 +479,30 @@ uint16_t PwmGeneration::TimerSetup(uint16_t deadtime, bool activeLow)
    /* PWM frequency */
    timer_set_period(PWM_TIMER, pwmmax);
    timer_set_repetition_counter(PWM_TIMER, repCounters[pwmdigits - MIN_PWM_DIGITS]);
+
+#ifdef SYNC_CURRENT_SAMPLING
+   //C1 (doc_sync_sampling_design.md, Option C.1, Q1): OC4/CC4 is otherwise
+   //unused (phases use OC1-OC3 (+N) only) -- repurpose it as ADC2's
+   //injected-group trigger (TIM1_CC4, wired up in
+   //hwinit.cpp sync_current_sampling_setup). No pin is mapped to TIM1_CH4;
+   //timer_enable_oc_output is still required to make the internal OC4REF
+   //trigger fire (bench-verified 16 Jul 2026 -- it fires once per PWM
+   //period, on OC4REF's rising edge, not twice per compare match).
+   //PWM2 mode makes OC4REF rise on the up-count approaching the top.
+   //
+   //CCR4 is set so the injected sequence (dummy + il1 + il2, 3 x 14 ADC
+   //cyc @ ADCCLK=12 MHz = 42 cyc = 3.5us = 252 ticks @ 72 MHz, sequential
+   //since Option C.1 has no dual-ADC parallelism) completes just before
+   //the serviced update event. Bench pinned that event at the counter top
+   //(16 Jul 2026 rig, bench/adc-gate-tests) -- but that rig did not
+   //replicate this function's TIM_EGR_UG kick, so the RCR phase must be
+   //re-checked in-firmware. [VERIFY on commissioning, see
+   //doc_sync_sampling_design.md Open questions]
+   const uint16_t adc2InjSeqLeadTicks = 252;
+   timer_set_oc_mode(PWM_TIMER, TIM_OC4, TIM_OCM_PWM2);
+   timer_set_oc_value(PWM_TIMER, TIM_OC4, pwmmax - adc2InjSeqLeadTicks);
+   timer_enable_oc_output(PWM_TIMER, TIM_OC4);
+#endif // SYNC_CURRENT_SAMPLING
 
    timer_generate_event(PWM_TIMER, TIM_EGR_UG);
 

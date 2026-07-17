@@ -77,7 +77,17 @@ static bool seenNorthSignal = false;
 static int32_t turnsSinceLastSample = 0;
 static int32_t distance = 0;
 static int32_t resolverMin = 0, resolverMax = 0, startupDelay;
+#ifdef SYNC_CURRENT_SAMPLING
+//C1 (doc_sync_sampling_design.md, Option C.1): sin and cos both live on
+//ADC1's injected group now (ranks 2/3, rank 1 is the dummy sample) --
+//the sinAdc/cosAdc pinswap indirection becomes a rank pair instead of an
+//ADC pair. Default (unswapped) mirrors the pre-C.1 mapping: sinAdc==ADC2
+//there read physical IN7 (now ADC1 rank 3), cosAdc==ADC1 read physical
+//IN6 (now ADC1 rank 2).
+static uint8_t sinRank = 3, cosRank = 2;
+#else
 static uint32_t sinAdc = ADC2, cosAdc = ADC1;
+#endif
 static int32_t detectedDirection = 0;
 static uint16_t sincosoffs = 2048;
 
@@ -157,6 +167,18 @@ void Encoder::SetImpulsesPerTurn(uint16_t imp)
 
 void Encoder::SwapSinCos(bool swap)
 {
+#ifdef SYNC_CURRENT_SAMPLING
+   if (swap)
+   {
+      sinRank = 2;
+      cosRank = 3;
+   }
+   else
+   {
+      sinRank = 3;
+      cosRank = 2;
+   }
+#else
    if (swap)
    {
       sinAdc = ADC1;
@@ -167,6 +189,7 @@ void Encoder::SwapSinCos(bool swap)
       sinAdc = ADC2;
       cosAdc = ADC1;
    }
+#endif
 }
 
 void Encoder::UpdateRotorAngle(int dir)
@@ -459,6 +482,20 @@ void Encoder::InitTimerABZMode()
 
 void Encoder::InitResolverMode()
 {
+#ifdef SYNC_CURRENT_SAMPLING
+   //C1 (doc_sync_sampling_design.md, Option C.1): sin and cos both move to
+   //ADC1's injected group as one 3-deep sequence {IN6 dummy, IN6 sin,
+   //IN7 cos} -- ADC2 is no longer touched by the resolver at all (it is
+   //dedicated to phase currents, see hwinit.cpp
+   //sync_current_sampling_setup). Trigger stays TIM3_CC4, unchanged. The
+   //dummy keeps the existing noisy-first-sample convention.
+   uint8_t channels1[3] = { 6, 6, 7 };
+
+   adc_set_injected_sequence(ADC1, sizeof(channels1), channels1);
+   adc_enable_external_trigger_injected(ADC1, ADC_CR2_JEXTSEL_JSWSTART);
+   adc_set_sample_time(ADC1, 6, ADC_SMPR_SMP_1DOT5CYC);
+   adc_set_sample_time(ADC1, 7, ADC_SMPR_SMP_1DOT5CYC);
+#else
    //The first injected sample is always noisy, so we insert one dummy sample
    uint8_t channels1[3] = { 6, 6 };
    uint8_t channels2[3] = { 7, 7 };
@@ -469,6 +506,7 @@ void Encoder::InitResolverMode()
    adc_enable_external_trigger_injected(ADC2, ADC_CR2_JEXTSEL_JSWSTART);
    adc_set_sample_time(ADC1, 6, ADC_SMPR_SMP_1DOT5CYC);
    adc_set_sample_time(ADC2, 7, ADC_SMPR_SMP_1DOT5CYC);
+#endif // SYNC_CURRENT_SAMPLING
 
    gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_ANALOG, GPIO6 | GPIO7);
    exti_disable_request(NORTH_EXC_EXTI);
@@ -485,6 +523,20 @@ void Encoder::InitResolverMode()
       timer_direction_up(REV_CNT_TIMER);
       timer_generate_event(REV_CNT_TIMER, TIM_EGR_UG);
       gpio_set_mode(NORTH_EXC_PORT, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, NORTH_EXC_PIN);
+#ifdef SYNC_CURRENT_SAMPLING
+      adc_set_injected_offset(ADC1, 2, 0);
+      adc_set_injected_offset(ADC1, 3, 0);
+
+      adc_start_conversion_injected(ADC1); //Determine offset
+
+      while (!adc_eoc_injected(ADC1));
+
+      int ch1 = adc_read_injected(ADC1, 2); //sin
+      int ch2 = adc_read_injected(ADC1, 3); //cos
+      adc_set_injected_offset(ADC1, 2, ch1);
+      adc_set_injected_offset(ADC1, 3, ch2);
+      adc_enable_external_trigger_injected(ADC1, ADC_CR2_JEXTSEL_TIM3_CC4);
+#else
       adc_set_injected_offset(ADC1, 2, 0);
       adc_set_injected_offset(ADC2, 2, 0);
 
@@ -497,6 +549,7 @@ void Encoder::InitResolverMode()
       adc_set_injected_offset(ADC1, 2, ch1);
       adc_set_injected_offset(ADC2, 2, ch2);
       adc_enable_external_trigger_injected(ADC1, ADC_CR2_JEXTSEL_TIM3_CC4);
+#endif // SYNC_CURRENT_SAMPLING
 
       if (CHK_BIPOLAR_OFS(ch1) || CHK_BIPOLAR_OFS(ch2))
       {
@@ -508,8 +561,13 @@ void Encoder::InitResolverMode()
       //Offset assumed 3.3V/2 - 2048
       //on my hardware, min is 0.465V, max is 2.510v, so offset is 1.4875v, or 1846
       //this should be a parameter?
+#ifdef SYNC_CURRENT_SAMPLING
+      adc_set_injected_offset(ADC1, 2, sincosoffs);
+      adc_set_injected_offset(ADC1, 3, sincosoffs);
+#else
       adc_set_injected_offset(ADC1, 2, sincosoffs);
       adc_set_injected_offset(ADC2, 2, sincosoffs);
+#endif // SYNC_CURRENT_SAMPLING
    }
 
    seenNorthSignal = true;
@@ -578,8 +636,13 @@ uint16_t Encoder::GetAngleSinCos()
 */
 uint16_t Encoder::DecodeAngle(bool invert)
 {
+#ifdef SYNC_CURRENT_SAMPLING
+   int sin = adc_read_injected(ADC1, sinRank);
+   int cos = adc_read_injected(ADC1, cosRank);
+#else
    int sin = adc_read_injected(sinAdc, 2);
    int cos = adc_read_injected(cosAdc, 2);
+#endif
 
    //Wait for signal to reach usable amplitude
    if ((resolverMax - resolverMin) > MIN_RES_AMP)
