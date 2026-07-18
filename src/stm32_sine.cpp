@@ -144,6 +144,13 @@ static void Ms10Task(void)
    Param::SetInt(Param::speed, Encoder::GetSpeed());
    Param::SetInt(Param::rotordir, Encoder::GetRotorDirection());
 
+#if defined(MANUALIQ_CMD_TIMEOUT) && (CONTROL == CTRL_FOC)
+   //T21 [FORK]: graceful manualiq auto-zero on command-silence (behind the
+   //GPIO dead-man). Runs every tick; only ever zeroes manualiq, never touches
+   //opmode/contactor/PWM-enable state.
+   VehicleControl::CheckManualCmdTimeout();
+#endif
+
    if (MOD_RUN == opmode && initWait == -1)
    {
       PwmGeneration::SetTorquePercent(torquePercent);
@@ -298,6 +305,11 @@ void Param::Change(Param::PARAM_NUM paramNum)
          //Param::Get every ISR cycle, so there is nothing to recompute here.
          //Return immediately to keep the ~50-100us soft-float default-branch
          //reconfiguration out of the CAN RX ISR on every command frame.
+      #ifdef MANUALIQ_CMD_TIMEOUT
+         //T21: stamp command liveness here (the silence we detect is silence
+         //of this very channel), then still return immediately.
+         VehicleControl::NoteManualCmd();
+      #endif
          return;
    #endif
       case Param::throtmax:

@@ -33,6 +33,9 @@
 #include "pwmgeneration.h"
 #include "hwinit.h"
 #include "regentaperhold.h"
+#if defined(MANUALIQ_CMD_TIMEOUT) && (CONTROL == CTRL_FOC)
+#include "cmdtimeout.h"
+#endif
 
 #define PRECHARGE_TIMEOUT 500 //5s
 #define CAN_TIMEOUT       50  //500ms
@@ -43,6 +46,9 @@
 CanHardware* VehicleControl::can;
 FunctionPointerCallback VehicleControl::callback(VehicleControl::CanReceive, VehicleControl::CanClear);
 uint32_t VehicleControl::lastCanRxTime = 0;
+#if defined(MANUALIQ_CMD_TIMEOUT) && (CONTROL == CTRL_FOC)
+CmdTimeout VehicleControl::manualCmdTimeout;
+#endif
 bool VehicleControl::lastCruiseSwitchState = false;
 bool VehicleControl::canIoActive = false;
 bool VehicleControl::spiEnabled = false;
@@ -394,6 +400,30 @@ void VehicleControl::SetContactorsOffState()
       DigIo::dcsw_out.Clear();
    }
 }
+
+#if defined(MANUALIQ_CMD_TIMEOUT) && (CONTROL == CTRL_FOC)
+/* T21 [FORK]: stamp liveness from the T7 manualiq/manualid Param::Change
+ * fast-path — the exact channel whose silence we detect. Cheap enough for the
+ * CAN RX ISR (an RTC read + a store), so the T7 hook is reused, not bypassed.
+ * PLACEHOLDER_HW: the CAN-silence semantics (the host rewrites manualiq every
+ * control tick, so absence-of-write == host silence) are [BENCH]-to-confirm;
+ * see PLACEHOLDERS.md. */
+void VehicleControl::NoteManualCmd()
+{
+   manualCmdTimeout.Note(rtc_get_counter_val());
+}
+
+/* Runs every Ms10Task. Graceful command decay behind the GPIO dead-man:
+ * zeroes manualiq (only) on command-silence, leaving contactor/PWM-enable
+ * state untouched so a brief host stall recovers without a re-precharge. */
+void VehicleControl::CheckManualCmdTimeout()
+{
+   int32_t iq = Param::GetInt(Param::manualiq);
+
+   if (manualCmdTimeout.ApplyZero(rtc_get_counter_val(), Param::GetInt(Param::iqtimeout), iq))
+      Param::SetInt(Param::manualiq, iq);
+}
+#endif
 
 void VehicleControl::GetDigInputs()
 {
