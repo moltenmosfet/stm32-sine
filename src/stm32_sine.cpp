@@ -60,6 +60,7 @@ static CanMap* canMap;
 static CanSdo* canSdo;
 static Terminal* terminal;
 static bool seenBrakePedal = false;
+static uint8_t canMapTxSlot = 0; //B4: round-robin index for spread CAN TX (SendByIndex)
 
 static void Ms100Task(void)
 {
@@ -100,9 +101,6 @@ static void Ms100Task(void)
 
    Param::SetFloat(Param::uac, uac);
    #endif // CONTROL
-
-   if (Param::GetInt(Param::canperiod) == CAN_PERIOD_100MS)
-      canMap->SendAll();
 }
 
 static void RunCharger(float udc)
@@ -260,8 +258,25 @@ static void Ms10Task(void)
 
    Param::SetInt(Param::uptime, rtc_get_counter_val());
 
+   //B4: 100 ms-period map spread one slot per 10 ms tick (MAX_MESSAGES=10 -> 100 ms/msg)
+   if (Param::GetInt(Param::canperiod) == CAN_PERIOD_100MS)
+   {
+      canMap->SendByIndex(canMapTxSlot);
+      canMapTxSlot = (canMapTxSlot + 1) % MAX_MESSAGES;
+   }
+}
+
+//B4: 10 ms-period map spread one slot per 1 ms tick (MAX_MESSAGES=10 -> 10 ms/msg).
+//Moving the burst SendAll() off Ms10/Ms100 into a per-slot round-robin keeps a
+//full TX cycle out of the heavier housekeeping tasks (helps their T10 overrun
+//margin) and never floods the 3 bxCAN TX mailboxes on a busy bus.
+static void Ms1Task(void)
+{
    if (Param::GetInt(Param::canperiod) == CAN_PERIOD_10MS)
-      canMap->SendAll();
+   {
+      canMap->SendByIndex(canMapTxSlot);
+      canMapTxSlot = (canMapTxSlot + 1) % MAX_MESSAGES;
+   }
 }
 
 /** This function is called when the user changes a parameter */
@@ -451,6 +466,7 @@ extern "C" int main(void)
 
    s.AddTask(Ms100Task, 100);
    s.AddTask(Ms10Task, 10);
+   s.AddTask(Ms1Task, 1); //B4: spread CAN TX (OC3; MAX_TASKS=4, so still one channel spare)
 
    DigIo::prec_out.Set();
 
