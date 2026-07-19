@@ -56,6 +56,8 @@ int Throttle::accelflt;
 float Throttle::maxregentravelhz;
 float Throttle::frqFiltered;
 float Throttle::fwFrqFiltered;
+int Throttle::accelSpeed;      //B3: last speed sample (was a function-local static)
+int Throttle::accelSpeedDiff;  //B3: filtered accel delta (was a function-local static)
 
 bool Throttle::CheckAndLimitRange(int& potval, uint8_t potIdx)
 {
@@ -273,32 +275,35 @@ void Throttle::IdcLimitCommand(float& finalSpnt, float idc)
 
 void Throttle::AccelerationLimitCommand(float& finalSpnt, int speed)
 {
-   static int lastSpeed = 0, speedDiff = 0;
+   //Filter the delta to the previously sampled speed, then store the current
+   //sample. State lifted from function-local statics to members (B3) so the
+   //apply half can be re-run for limit-reason attribution without re-filtering.
+   accelSpeedDiff = IIRFILTER(accelSpeedDiff, speed - accelSpeed, accelflt);
+   accelSpeed = speed;
+   ApplyAccelerationLimit(finalSpnt);
+}
 
-   speedDiff = IIRFILTER(speedDiff, speed - lastSpeed, accelflt);
-
-   if (finalSpnt >= 0 && speed > 100)
+void Throttle::ApplyAccelerationLimit(float& finalSpnt)
+{
+   if (finalSpnt >= 0 && accelSpeed > 100)
    {
-      int accelErr = accelmax - speedDiff;
+      int accelErr = accelmax - accelSpeedDiff;
       int res = 20 * accelErr;
 
       res = MAX(0, res);
       finalSpnt = MIN(res, finalSpnt);
    }
-   lastSpeed = speed;
 }
 
 // Two call sites need this per Ms10Task cycle (final torque command, and
 // field-weakening current derate) -- each must run its own IIR filter once
-// per cycle, so the state is owned per caller, not shared. See
-// FrequencyLimitCommandFw for the second caller.
-void Throttle::RunFrequencyLimit(float& finalSpnt, float frequency, float& frqFiltered)
+// per cycle, so the filtered-frequency state is owned per caller and passed
+// into the shared clamp. See FrequencyLimitCommandFw for the second caller.
+void Throttle::ApplyFreqLimitAt(float& finalSpnt, float frqFilteredVal)
 {
-   frqFiltered = IIRFILTERF(frqFiltered, frequency, 4);
-
    if (finalSpnt > 0)
    {
-      float frqerr = fmax - frqFiltered;
+      float frqerr = fmax - frqFilteredVal;
       float res = frqerr * 4;
 
       res = MAX(0, res);
@@ -308,10 +313,30 @@ void Throttle::RunFrequencyLimit(float& finalSpnt, float frequency, float& frqFi
 
 void Throttle::FrequencyLimitCommand(float& finalSpnt, float frequency)
 {
-   RunFrequencyLimit(finalSpnt, frequency, frqFiltered);
+   frqFiltered = IIRFILTERF(frqFiltered, frequency, 4);
+   ApplyFreqLimitAt(finalSpnt, frqFiltered);
 }
 
 void Throttle::FrequencyLimitCommandFw(float& finalSpnt, float frequency)
 {
-   RunFrequencyLimit(finalSpnt, frequency, fwFrqFiltered);
+   fwFrqFiltered = IIRFILTERF(fwFrqFiltered, frequency, 4);
+   ApplyFreqLimitAt(finalSpnt, fwFrqFiltered);
+}
+
+//B3: apply-only against the main filtered frequency (no IIR update), for the
+//limit-reason dry recompute in VehicleControl::ProcessThrottle.
+void Throttle::ApplyFrequencyLimit(float& finalSpnt)
+{
+   ApplyFreqLimitAt(finalSpnt, frqFiltered);
+}
+
+//B3: zero the derate filter state (accel delta + both frequency filters).
+//Mirrors what a fresh boot / LoadDefaults path would leave; used by host tests
+//so a prior case's filter history can't leak into the next.
+void Throttle::ResetDerateState()
+{
+   accelSpeed = 0;
+   accelSpeedDiff = 0;
+   frqFiltered = 0;
+   fwFrqFiltered = 0;
 }

@@ -39,6 +39,13 @@ class Throttle
       static void AccelerationLimitCommand(float& finalSpnt, int speed);
       static void FrequencyLimitCommand(float& finalSpnt, float frequency);
       static void FrequencyLimitCommandFw(float& finalSpnt, float frequency);
+      //B3: apply-only halves of the accel/freq limiters (no filter-state
+      //mutation) so the limit chain can be dry-recomputed for limit-reason
+      //attribution. The XxxLimitCommand entry points update the filter state
+      //once per tick, then call these.
+      static void ApplyAccelerationLimit(float& finalSpnt);
+      static void ApplyFrequencyLimit(float& finalSpnt);
+      static void ResetDerateState();
       static float RampThrottle(float finalSpnt);
       static void UpdateDynamicRegenTravel(float regenTravelMax, float frequency);
       static bool IsThrottlePressed(int pot1);
@@ -73,13 +80,17 @@ class Throttle
       static float maxregentravelhz;
 
    private:
-      static void RunFrequencyLimit(float& finalSpnt, float frequency, float& frqFiltered);
+      //Shared clamp for both frequency limiters; each caller owns its own
+      //filtered-frequency state (frqFiltered / fwFrqFiltered) and passes it in.
+      static void ApplyFreqLimitAt(float& finalSpnt, float frqFilteredVal);
       static int speedFiltered;
       static float potnomFiltered;
       static float brkRamped;
       static float throttleRamped;
       static float frqFiltered;
       static float fwFrqFiltered;
+      static int accelSpeed;
+      static int accelSpeedDiff;
 };
 
 #endif // THROTTLE_H

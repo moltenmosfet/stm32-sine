@@ -282,6 +282,59 @@ void VehicleControl::SelectDirection()
 
 static RegenTaperHold regenTaperHold;
 
+//B3 (upstream PR #59, adapted): name the derate that last clamped the command.
+static void UpdateLimitReason(float previousSpnt, float limitedSpnt, int reason, int& reasonOut)
+{
+   //Keep the reason that produced the currently lowest remaining limit.
+   if (limitedSpnt != previousSpnt)
+      reasonOut = reason;
+}
+
+//Dry recompute of ProcessThrottle's derate chain on a copy of the setpoint, in
+//the SAME order, to attribute the active limit. The frequency/acceleration
+//stages use the apply-only variants so this pass never disturbs their IIR
+//state (the live chain already updated it once this tick). Must be kept in step
+//with the real chain below. No REGENRAMP stage: this fork's regen taper
+//(regenTaperHold) runs after potnom is published, outside this recompute.
+static int GetPowerLimitReason(float candidateSpnt)
+{
+   int reason = LIMIT_NONE;
+   float limitedSpnt = candidateSpnt;
+   float previousSpnt = limitedSpnt;
+
+   if (hwRev != HW_TESLA)
+   {
+      Throttle::BmsLimitCommand(limitedSpnt, Param::GetBool(Param::din_bms));
+      UpdateLimitReason(previousSpnt, limitedSpnt, LIMIT_BMS, reason);
+   }
+
+   previousSpnt = limitedSpnt;
+   Throttle::UdcLimitCommand(limitedSpnt, Param::GetFloat(Param::udc));
+   UpdateLimitReason(previousSpnt, limitedSpnt, LIMIT_UDC, reason);
+
+   previousSpnt = limitedSpnt;
+   Throttle::IdcLimitCommand(limitedSpnt, Param::GetFloat(Param::idc));
+   UpdateLimitReason(previousSpnt, limitedSpnt, LIMIT_IDC, reason);
+
+   previousSpnt = limitedSpnt;
+   Throttle::ApplyFrequencyLimit(limitedSpnt);
+   UpdateLimitReason(previousSpnt, limitedSpnt, LIMIT_FMAX, reason);
+
+   previousSpnt = limitedSpnt;
+   Throttle::ApplyAccelerationLimit(limitedSpnt);
+   UpdateLimitReason(previousSpnt, limitedSpnt, LIMIT_ACCEL, reason);
+
+   previousSpnt = limitedSpnt;
+   Throttle::TemperatureDerate(Param::GetFloat(Param::tmphs), Param::GetFloat(Param::tmphsmax), limitedSpnt);
+   UpdateLimitReason(previousSpnt, limitedSpnt, LIMIT_TMPHS, reason);
+
+   previousSpnt = limitedSpnt;
+   Throttle::TemperatureDerate(Param::GetFloat(Param::tmpm), Param::GetFloat(Param::tmpmmax), limitedSpnt);
+   UpdateLimitReason(previousSpnt, limitedSpnt, LIMIT_TMPM, reason);
+
+   return reason;
+}
+
 float VehicleControl::ProcessThrottle()
 {
    float throtSpnt = 0, finalSpnt;
@@ -320,6 +373,13 @@ float VehicleControl::ProcessThrottle()
       DigIo::err_out.Set();
       ErrorMessage::Post(ERR_TMPMMAX);
    }
+
+   //B3: name the derate that would bite at FULL demand on the accel
+   //(throtmax-seeded) and regen (throtmin-seeded) paths. Observability for the
+   //normal torque path; manualiq (dyno mode) bypasses these derates entirely,
+   //so in dyno runs these describe the unused throttle path, not the command.
+   Param::SetInt(Param::acclimreason, GetPowerLimitReason(Param::GetFloat(Param::throtmax)));
+   Param::SetInt(Param::regenlimreason, GetPowerLimitReason(Param::GetFloat(Param::throtmin)));
 
    Param::SetFloat(Param::potnom, finalSpnt);
 
