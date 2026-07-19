@@ -421,7 +421,12 @@ void VehicleControl::CheckManualCmdTimeout()
    int32_t iq = Param::GetInt(Param::manualiq);
 
    if (manualCmdTimeout.ApplyZero(rtc_get_counter_val(), Param::GetInt(Param::iqtimeout), iq))
+   {
       Param::SetInt(Param::manualiq, iq);
+      //Ruled 2026-07-19: a dead host must not leave d-axis flux current
+      //latched either — zero both current refs, same graceful decay.
+      Param::SetInt(Param::manualid, 0);
+   }
 }
 #endif
 
