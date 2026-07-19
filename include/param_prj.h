@@ -24,7 +24,7 @@
    2. Temporary parameters
    3. Display values
  */
-//Next param id (increase when adding new parameter!): 167
+//Next param id (increase when adding new parameter!): 173 (172 = T21 iqtimeout, flag-gated; 167-171 reserved by B2-autotune)
 //Next value Id: 2058
 /*              category     name         unit       min     max     default id */
 
@@ -233,6 +233,21 @@
     VALUE_ENTRY(uexc,    "dig",   2056 ) \
     VALUE_ENTRY(anticog, "dig",   2055 ) \
 
+/* T21 [FORK]: opt-in manualiq auto-zero on command-silence (build flag
+ * MANUALIQ_CMD_TIMEOUT, Makefile CMD_TIMEOUT=1; default OFF => this macro
+ * expands to nothing and the param table / enum are byte-identical to
+ * `fixes`). FOC-only, so it is only referenced from the CTRL_FOC PARAM_LIST.
+ * id 172 skips B2-autotune's reserved 167-171. */
+#ifdef MANUALIQ_CMD_TIMEOUT
+/*              category     name         unit       min     max     default id */
+//PLACEHOLDER_HW: iqtimeout default (20 = 200ms) is a bench-resolved guess; see PLACEHOLDERS.md
+#define CMD_TIMEOUT_PARAMS \
+    TESTP_ENTRY(CAT_TEST,    iqtimeout,   "10ms",    0,      1000,   20,     172 ) \
+
+#else
+#define CMD_TIMEOUT_PARAMS
+#endif
+
 #if CONTROL == CTRL_SINE
 #define PARAM_LIST \
     MOTOR_PARAMETERS_SINE \
@@ -266,6 +281,7 @@
     AUTOMATION_CONTACT_PWM_COMM_PARAMETERS \
     TESTP_ENTRY(CAT_TEST,    manualiq,    "A",       -400,   400,    0,      151 ) \
     TESTP_ENTRY(CAT_TEST,    manualid,    "A",       -400,   400,    0,      152 ) \
+    CMD_TIMEOUT_PARAMS \
     VALUE_BLOCK1 \
     VALUES_FOC \
     VALUE_BLOCK2 \

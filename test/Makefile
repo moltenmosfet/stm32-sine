@@ -11,7 +11,8 @@ OBJS		= test_main.o fu.o test_fu.o test_fp.o test_vcu.o my_fp.o my_string.o para
 			  stub_libopencm3.o picontroller.o foc.o test_picontroller.o test_foc.o \
 			  test_getilmax.o test_qclamp.o test_regentaperhold.o test_anticog.o \
 			  canfilterpack.o test_canfilterpack.o \
-			  stm32scheduler.o test_stm32scheduler.o
+			  stm32scheduler.o test_stm32scheduler.o \
+			  test_cmdtimeout.o
 VPATH = ../src ../libopeninv/src
 
 # Check if the variable GITHUB_RUN_NUMBER exists. When running on the github actions running, this

@@ -20,6 +20,9 @@
 #define VCU_H
 #include "canhardware.h"
 #include "errormessage.h"
+#if defined(MANUALIQ_CMD_TIMEOUT) && (CONTROL == CTRL_FOC)
+#include "cmdtimeout.h"
+#endif
 
 class VehicleControl
 {
@@ -36,6 +39,16 @@ class VehicleControl
       static float ProcessUdc();
       static float ProcessThrottle();
       static void SetContactorsOffState();
+#if defined(MANUALIQ_CMD_TIMEOUT) && (CONTROL == CTRL_FOC)
+      /* T21 [FORK]: manualiq command-silence auto-zero (defence-in-depth
+       * BEHIND the hardware GPIO dead-man; graceful decay, not a fault trip).
+       * NoteManualCmd() stamps liveness from the T7 manualiq/manualid
+       * Param::Change fast-path; CheckManualCmdTimeout() runs each Ms10Task
+       * and zeroes manualiq (only) once the command goes silent past
+       * Param::iqtimeout. Neither touches contactor/PWM-enable state. */
+      static void NoteManualCmd();
+      static void CheckManualCmdTimeout();
+#endif
 
    private:
       static CanHardware* can; //!< Member variable "can"
@@ -49,6 +62,9 @@ class VehicleControl
       static uint16_t bmwAdcValues[4];
       static FunctionPointerCallback callback;
       static uint32_t lastCanRxTime;
+#if defined(MANUALIQ_CMD_TIMEOUT) && (CONTROL == CTRL_FOC)
+      static CmdTimeout manualCmdTimeout;
+#endif
       static uint8_t canErrors;
       static uint8_t seqCounter;
 
