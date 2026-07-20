@@ -15,8 +15,9 @@ The review was done while building a dynamometer with a Nissan Leaf EM57 motor
 as its absorber, which is why it concentrates on low-speed / low-torque
 behavior.
 
-The only dyno-specific behavior sits behind two new optional parameters
-(`qlimfrq`, `dtcomp`), both defaulting to stock behavior.
+The only dyno-specific behavior sits behind new optional parameters
+(`qlimfrq`, `dtcomp`, and — only when compiled with `CMD_TIMEOUT=1` —
+`iqtimeout`), all defaulting to stock behavior.
 
 `fixes` is the integration branch. It was created off the pinned upstream
 baseline commit `1dfab85`. Fix branches (`fix/T<nn>-…`) merge into `fixes`
@@ -65,6 +66,11 @@ and the [openinverter wiki](https://openinverter.org/wiki/).
   CAN filter packing, scheduler overrun logic, and more) now run under a
   native host test suite; every change is host-tested and both `CONTROL=FOC`
   and `CONTROL=SINE` firmware builds are compile-checked.
+- **Ported / added features** — upstream PR #58's spread mapped CAN TX slots
+  (one slot per 1 ms / 10 ms tick instead of a per-task burst, avoiding TX
+  mailbox flooding on a busy bus), and an opt-in auto-zero of the manual
+  current commands on command silence (`make CMD_TIMEOUT=1`, default off,
+  bench-gated).
 
 ---
 
