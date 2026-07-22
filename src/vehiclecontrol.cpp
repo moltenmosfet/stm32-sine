@@ -33,6 +33,7 @@
 #include "pwmgeneration.h"
 #include "hwinit.h"
 #include "regentaperhold.h"
+#include "dualpotplausible.h"
 #if defined(MANUALIQ_CMD_TIMEOUT) && (CONTROL == CTRL_FOC)
 #include "cmdtimeout.h"
 #endif
@@ -790,6 +791,17 @@ float VehicleControl::GetUserThrottleCommand()
    {
       if (inRange1 && inRange2)
       {
+         //T25 [FORK]: both channels individually in range, but if they disagree
+         //beyond potdiffmax (0 = check disabled) one may be stuck at a plausible
+         //value. Ruling 2026-07-23 (b): keep the MIN-select command below, but
+         //raise a DEDICATED plausibility fault (ERR_THROTTLEDIFF, distinct from
+         //the per-channel ERR_THROTTLE1/2 range faults) so the stuck-but-in-range
+         //pot is never silent. Command is NOT altered here.
+         if (DualPotPlausibility::Implausible(potnom1, potnom2, Param::GetFloat(Param::potdiffmax)))
+         {
+            DigIo::err_out.Set();
+            PostErrorIfRunning(ERR_THROTTLEDIFF);
+         }
          //Both channels good, take lower one
          potnom1 = MIN(potnom1, potnom2);
       }
