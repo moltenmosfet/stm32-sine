@@ -17,6 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "canhardware.h"
+#include "my_math.h"
 #include "params.h"
 #include "errormessage.h"
 #include "inc_encoder.h"
@@ -175,6 +176,128 @@ static void TestCanBrakeLightHysteresis()
    ASSERT(!Param::GetBool(Param::dout_brake));
 }
 
+// ---------------------------------------------------------------------------
+// T24: dual-channel (dual-pot) selection coverage.
+//
+// GetUserThrottleCommand()'s POTMODE_DUALCHANNEL block (vehiclecontrol.cpp,
+// the inRange1/inRange2 four-way select) is the successor to upstream's
+// deleted Throttle::CheckDualThrottle cross-channel agreement check, and had
+// zero coverage (T23 residual 2). These cases drive all four branches through
+// the public ProcessThrottle() path and lock the selection + error-posting
+// behaviour, including the asymmetry the audit flagged: a bad channel 1 is
+// NOT a silent fallback -- the !inRange1 guard upstream of the select posts
+// ERR_THROTTLE1 + err_out unconditionally, while a bad channel 2 posts
+// ERR_THROTTLE2 from inside the select. Both are locked here.
+//
+// Setup makes the whole ProcessThrottle chain a pass-through for a positive
+// command: brknom=0 + linearity=1 make CalcThrottle the identity, ramp rate
+// 200 spans the full [-100,100] span in one call (so the private, persistent
+// throttleRamped state can't perturb the golden), and every derate
+// (bms/udc/idc/freq/accel/temp) is configured wide enough not to bite. So
+// Param::potnom == the selected channel's DigitsToPercent value.
+static void SetupDualChannelPassthrough()
+{
+   Param::SetInt(Param::potmode, POTMODE_DUALCHANNEL | POTMODE_CAN);
+   Param::SetFloat(Param::regentravel, 0); // -> brknom=0 via UpdateDynamicRegenTravel
+   Param::SetFloat(Param::udc, 400);
+   Param::SetFloat(Param::idc, 0);
+   Param::SetFloat(Param::fstat, 0);
+   Param::SetFloat(Param::tmphs, 0);
+   Param::SetFloat(Param::tmphsmax, 100);
+   Param::SetFloat(Param::tmpm, 0);
+   Param::SetFloat(Param::tmpmmax, 100);
+
+   Throttle::linearity = 1;       // identity CalcThrottle for potnom > brknom
+   Throttle::maxregentravelhz = 0;
+   Throttle::brkmax = -50;
+   Throttle::brknompedal = -50;
+   Throttle::throtmax = 100;
+   Throttle::throtmin = -100;
+   Throttle::throttleRamp = 200;  // one-call convergence, ramp-state independent
+   Throttle::regenRamp = 200;
+   Throttle::udcmin = 0;
+   Throttle::udcmax = 1000;
+   Throttle::idcmin = -5000;
+   Throttle::idcmax = 1000;
+   Throttle::idckp = 1;
+   Throttle::fmax = 100000;
+
+   rtc = 100; // keep (rtc - lastCanRxTime) below CAN_TIMEOUT after HandleRx
+}
+
+// Drive one CAN frame through the dual-channel path with opmode=MOD_RUN so
+// PostErrorIfRunning actually fires, then run the throttle pipeline.
+static void RunDualChannel(uint32_t pot, uint32_t pot2)
+{
+   uint32_t data[2];
+   FillInCanData(data, pot, pot2, CAN_IO_FWD, 0, 0, 1);
+   vcuCan->HandleRx(vcuCanId, data, 8);
+   VehicleControl::GetDigInputs();
+   Param::SetInt(Param::opmode, MOD_RUN);
+   errorMessage = (ERROR_MESSAGE_NUM)-1; // sentinel: detect "no error posted"
+   VehicleControl::ProcessThrottle();
+}
+
+// Both channels in range: the lower reading wins (MIN-select), regardless of
+// which physical channel it is. Proves it is a MIN, not "always channel 1".
+static void TestDualBothGoodMinSelect()
+{
+   SetupDualChannelPassthrough();
+   Throttle::potmin[0] = 0; Throttle::potmax[0] = 4000;
+   Throttle::potmin[1] = 0; Throttle::potmax[1] = 4000;
+
+   // ch1 = 50%, ch2 = 20% -> select 20%
+   RunDualChannel(2000, 800);
+   ASSERT(ABS(Param::GetFloat(Param::potnom) - 20.0f) < 0.01f);
+
+   // ch1 = 20%, ch2 = 50% -> still select the lower, 20% (now from ch1)
+   RunDualChannel(800, 2000);
+   ASSERT(ABS(Param::GetFloat(Param::potnom) - 20.0f) < 0.01f);
+}
+
+// Channel 1 good, channel 2 out of range: use channel 1 as-is, and the select
+// posts ERR_THROTTLE2 (channel 1 is fine, so no ERR_THROTTLE1 upstream).
+static void TestDualCh1GoodCh2Bad()
+{
+   SetupDualChannelPassthrough();
+   Throttle::potmin[0] = 0; Throttle::potmax[0] = 4000; // ch1 in-range window
+   Throttle::potmin[1] = 0; Throttle::potmax[1] = 1000; // ch2 narrow window
+
+   RunDualChannel(2000, 3000); // ch1=50%, ch2=3000 > 1000+SLACK -> out of range
+   ASSERT(ABS(Param::GetFloat(Param::potnom) - 50.0f) < 0.01f);
+   ASSERT(errorMessage == ERR_THROTTLE2);
+}
+
+// Channel 1 out of range, channel 2 good: fall back to channel 2's value. The
+// fallback is NOT silent -- the !inRange1 guard already set err_out and posted
+// ERR_THROTTLE1; the select posts nothing further, so ERR_THROTTLE1 stands.
+// (Asymmetric vs the ch2-bad case, which raises ERR_THROTTLE2 -- per-channel
+// error ids, intentional. Locked here as characterization; behaviour unchanged.)
+static void TestDualCh1BadCh2Good()
+{
+   SetupDualChannelPassthrough();
+   Throttle::potmin[0] = 0; Throttle::potmax[0] = 1000; // ch1 narrow window
+   Throttle::potmin[1] = 0; Throttle::potmax[1] = 4000; // ch2 in-range window
+
+   RunDualChannel(3000, 2000); // ch1=3000 out of range, ch2=50%
+   ASSERT(ABS(Param::GetFloat(Param::potnom) - 50.0f) < 0.01f);
+   ASSERT(errorMessage == ERR_THROTTLE1); // NOT ERR_THROTTLE2: the flagged asymmetry
+}
+
+// Both channels out of range: inhibit movement (return 0). ERR_THROTTLE1 fires
+// from the upstream guard, then the select's else-branch posts ERR_THROTTLE2,
+// so the last-posted error is ERR_THROTTLE2.
+static void TestDualBothBad()
+{
+   SetupDualChannelPassthrough();
+   Throttle::potmin[0] = 0; Throttle::potmax[0] = 1000;
+   Throttle::potmin[1] = 0; Throttle::potmax[1] = 1000;
+
+   RunDualChannel(3000, 3000); // both out of range
+   ASSERT(Param::GetFloat(Param::potnom) == 0);
+   ASSERT(errorMessage == ERR_THROTTLE2);
+}
+
 void VCUTest::TestCaseSetup()
 {
    VehicleControl::SetCan(new CanStub());
@@ -188,7 +311,8 @@ void VCUTest::TestCaseSetup()
    Throttle::potmin[1] = Throttle::potmax[1] = 0;
 }
 
-REGISTER_TEST(VCUTest, CanTest1, CanTest2, CanTest3, TestCanSeqError1, TestCanSeqError2, TestCanBrakeLightHysteresis);
+REGISTER_TEST(VCUTest, CanTest1, CanTest2, CanTest3, TestCanSeqError1, TestCanSeqError2, TestCanBrakeLightHysteresis,
+              TestDualBothGoodMinSelect, TestDualCh1GoodCh2Bad, TestDualCh1BadCh2Good, TestDualBothBad);
 
 /* Stub functions */
 extern "C" void crc_reset()
