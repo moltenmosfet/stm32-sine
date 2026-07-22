@@ -47,23 +47,33 @@ static void TestSetup()
       Throttle::idleThrotLim = FP_FROMFLT(30);
 }
 
+//CalcThrottle takes normalized percentages, not raw pot counts; pot2nom is
+//the regen-strength pot. Ramping lives in RampThrottle (covered via
+//test_vcu.cpp), not here.
 static void TestBrkPedal()
 {
-   int percent = Throttle::CalcThrottle(1500, 3000, true);
-   ASSERT(percent == -25)
-   percent = Throttle::CalcThrottle(1500, 3000, true);
-   ASSERT(percent == -50)
-   percent = Throttle::CalcThrottle(1500, 3000, true);
-   ASSERT(percent == -60)
-   percent = Throttle::CalcThrottle(1500, 3000, true);
-   ASSERT(percent == -60)
+   //Brake pedal forces brknompedal (-60) scaled by pot2nom, regardless of
+   //throttle position; the -0.1 offset keeps it strictly negative
+   float percent = Throttle::CalcThrottle(65, 100, true);
+   ASSERT(ABS(percent - -60.1f) < 0.01f)
+   percent = Throttle::CalcThrottle(65, 50, true);
+   ASSERT(ABS(percent - -30.1f) < 0.01f)
+   //pot2nom=0 must still never reach 0 -- that could spin up the motor
+   percent = Throttle::CalcThrottle(65, 0, true);
+   ASSERT(percent < 0 && percent > -1)
 }
 
 static void TestRegen()
 {
-   Throttle::CalcThrottle(2000, 3000, false);
-   int percent = Throttle::CalcThrottle(1000, 3000, false);
-   ASSERT(percent == -25)
+   //Off-pedal regen zone (potnom < brknom): proportional from brkmax (-50)
+   //at zero pedal to 0 at brknom
+   float percent = Throttle::CalcThrottle(15, 100, false);
+   ASSERT(ABS(percent - -25.05f) < 0.01f)
+   percent = Throttle::CalcThrottle(30, 100, false);
+   ASSERT(percent == 0)
+   //Regen-strength pot scales the off-pedal zone too
+   percent = Throttle::CalcThrottle(15, 50, false);
+   ASSERT(ABS(percent - -12.55f) < 0.01f)
 }
 
 static void TestLinearity()
@@ -85,74 +95,6 @@ static void TestLinearity()
    percent = Throttle::CalcThrottle(65, 100, false);
    ASSERT((int)percent == 25)
 }
-#if 0
-static void TestDualThrottle()
-{
-   //0% on both channels
-   int pot = 1000;
-   bool result = Throttle::CheckDualThrottle(&pot, 3000);
-   ASSERT(result == true);
-
-   //50% on both channels
-   pot = 1500;
-   result = Throttle::CheckDualThrottle(&pot, 3500);
-   ASSERT(result == true);
-
-   //100% on both channels
-   pot = 2000;
-   result = Throttle::CheckDualThrottle(&pot, 4000);
-   ASSERT(result == true);
-
-   //111% on first channel, 100% on second
-   pot = 2110;
-   result = Throttle::CheckDualThrottle(&pot, 4000);
-   ASSERT(result == false);
-   ASSERT(pot == Throttle::potmin[0]);
-
-   //50% on first channel, -50% on second
-   pot = 1500;
-   result = Throttle::CheckDualThrottle(&pot, 2500);
-   ASSERT(result == false);
-
-   //50% on first channel, 61% on second
-   pot = 1500;
-   result = Throttle::CheckDualThrottle(&pot, 3610);
-   ASSERT(result == false);
-
-   //No we test inverted 2nd channel
-   Throttle::potmin[1] = 4000;
-   Throttle::potmax[1] = 3000;
-
-   //70% on both channels
-   pot = 1700;
-   result = Throttle::CheckDualThrottle(&pot, 3300);
-   ASSERT(result == true);
-
-   //30% on 1st, 20% on second
-   pot = 1300;
-   result = Throttle::CheckDualThrottle(&pot, 3800);
-   ASSERT(result == true);
-
-   //30% on 1st, 19% on second
-   pot = 1300;
-   result = Throttle::CheckDualThrottle(&pot, 3810);
-   ASSERT(result == false);
-
-   //30% on 1st, 41% on second
-   pot = 1300;
-   result = Throttle::CheckDualThrottle(&pot, 3590);
-   ASSERT(result == false);
-
-   //300% on 1st (stuck at max), 100% on second
-   pot = 4000;
-   result = Throttle::CheckDualThrottle(&pot, 3000);
-   ASSERT(result == false);
-   ASSERT(pot == Throttle::potmin[0]);
-
-   Throttle::potmin[1] = 3000;
-   Throttle::potmax[1] = 4000;
-}
-#endif
 
 // T12/F16: FrequencyLimitCommand used to keep its IIR filter state in a
 // function-local static shared by two callers per Ms10Task cycle
@@ -195,4 +137,4 @@ static void TestFrequencyLimitStateIsolated()
 }
 
 //This line registers the test
-REGISTER_TEST(ThrottleTest, TestSetup, TestLinearity, TestFrequencyLimitStateIsolated);
+REGISTER_TEST(ThrottleTest, TestSetup, TestBrkPedal, TestRegen, TestLinearity, TestFrequencyLimitStateIsolated);

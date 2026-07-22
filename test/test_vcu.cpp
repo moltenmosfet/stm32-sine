@@ -179,6 +179,13 @@ void VCUTest::TestCaseSetup()
 {
    VehicleControl::SetCan(new CanStub());
    Param::LoadDefaults();
+   //These cases assume uncalibrated pots: DigitsToPercent returns the
+   //degenerate 100 when potmax == potmin, which is the "ADC value" the
+   //non-CAN potmode assertions expect. Other suites (ThrottleTest) calibrate
+   //these statics, and suite order follows link order -- pin the state here
+   //instead of relying on running first.
+   Throttle::potmin[0] = Throttle::potmax[0] = 0;
+   Throttle::potmin[1] = Throttle::potmax[1] = 0;
 }
 
 REGISTER_TEST(VCUTest, CanTest1, CanTest2, CanTest3, TestCanSeqError1, TestCanSeqError2, TestCanBrakeLightHysteresis);
