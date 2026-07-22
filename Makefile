@@ -169,7 +169,16 @@ get-deps:
 
 Test:
 	$(MAKE) -C test
-	$(MAKE) -C libopeninv/test
+	# libopeninv's CAN receive map compiles a mutually-exclusive test set per
+	# CAN_SIGNED leg (signed vs unsigned reception). The Makefile defaults to
+	# CAN_SIGNED=0, so a single build leaves the ~23 signed-reception cases dead
+	# in this aggregate suite (T23 residual 1 / T24). Build AND run both legs so
+	# neither product config can silently rot; leave the shipped-default (=0)
+	# leg built last so a following `test_libopeninv` invocation sees it.
+	$(MAKE) -C libopeninv/test clean all CAN_SIGNED=1
+	libopeninv/test/test_libopeninv
+	$(MAKE) -C libopeninv/test clean all CAN_SIGNED=0
+	libopeninv/test/test_libopeninv
 cleanTest:
 	$(MAKE) -C test clean
 	$(MAKE) -C libopeninv/test clean
