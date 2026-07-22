@@ -24,7 +24,7 @@
    2. Temporary parameters
    3. Display values
  */
-//Next param id (increase when adding new parameter!): 173 (172 = T21 iqtimeout, flag-gated; 167-171 reserved by B2-autotune)
+//Next param id (increase when adding new parameter!): 173 (172 = T21 iqtimeout, flag-gated; 167-171 reserved by B2-autotune; 173-199 reserved for T22 virtual-inertia; 200 = G8 manualiqmax, FOC-only)
 //Next value Id: 2058
 /*              category     name         unit       min     max     default id */
 
@@ -248,6 +248,27 @@
 #define CMD_TIMEOUT_PARAMS
 #endif
 
+/* G8 [FORK]: firmware authority cap (magnitude) on the CAN manualiq AND
+ * manualid torque path (FMEA G8 / ABS-1 / RTL-2). Applied at the FOC summing
+ * junction via include/manualclamp.h. Default 400 A = the existing +/-400 param
+ * range, so the shipped-default binary is behaviourally unchanged until
+ * configured down. FOC-only (the manual current path only exists in the FOC
+ * build). id 200 leaves 173-199 to T22's planned virtual-inertia coefficients
+ * and skips B2's 167-171 / T21's 172 (see FORK_NOTES G8 row). Defined out here
+ * because a block comment cannot live inside the backslash-continued PARAM_LIST
+ * macro body (it truncates the list).
+ *
+ * PARAM_ENTRY (TYPE_PARAM), NOT TESTP_ENTRY: the ceiling MUST survive a power
+ * cycle. param_save.cpp persists only TYPE_PARAM to flash, so a TESTPARAM would
+ * reset to the 400 default (= clamp off) at every boot until the host — the
+ * component G8 distrusts — rewrote it. A persisted PARAM_ENTRY, paired with the
+ * boot latch (manualclamp.h), makes the commissioned ceiling durable and the
+ * runtime channel raise-proof. */
+/*              category     name         unit       min     max     default id */
+#define G8_CLAMP_PARAM \
+    PARAM_ENTRY(CAT_TEST,    manualiqmax, "A",       0,      400,    400,    200 ) \
+
+
 #if CONTROL == CTRL_SINE
 #define PARAM_LIST \
     MOTOR_PARAMETERS_SINE \
@@ -281,6 +302,7 @@
     AUTOMATION_CONTACT_PWM_COMM_PARAMETERS \
     TESTP_ENTRY(CAT_TEST,    manualiq,    "A",       -400,   400,    0,      151 ) \
     TESTP_ENTRY(CAT_TEST,    manualid,    "A",       -400,   400,    0,      152 ) \
+    G8_CLAMP_PARAM \
     CMD_TIMEOUT_PARAMS \
     VALUE_BLOCK1 \
     VALUES_FOC \

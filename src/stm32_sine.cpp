@@ -447,6 +447,18 @@ extern "C" int main(void)
    tim_setup();
    nvic_setup();
    parm_load();
+#if CONTROL == CTRL_FOC
+   //G8 [FORK]: latch the manual-current authority ceiling immediately after
+   //flash load. Effective ceiling = MIN(live, latched); raising manualiqmax at
+   //runtime has no effect until set+save+reboot re-latches here.
+   //ORDERING CONSTRAINT — this MUST stay before the Stm32Can/CanMap/InverterSdo
+   //constructors below: those bring CAN RX live (CanMap loads flash-stored RX
+   //mappings, possibly targeting manualiqmax's id) and a host spamming
+   //manualiqmax during power-cycle could otherwise land a write in the window
+   //before the latch and poison the whole session. Nothing between parm_load()
+   //and here modifies manualiqmax. Do NOT move this after CAN construction.
+   PwmGeneration::LatchManualCurrentCeiling();
+#endif
    ErrorMessage::SetTime(1);
    Param::SetInt(Param::pwmio, pwmio_setup(Param::GetBool(Param::pwmpol)));
 

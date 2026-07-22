@@ -42,6 +42,13 @@ class PwmGeneration
       static void SetChargeCurrent(float cur);
       static void SetPolePairRatio(int ratio) { polePairRatio = ratio; }
       static void SetFwExcCurMax(float fwcur, float excur);
+      /* G8 [FORK]: latch the manual-current authority ceiling (manualiqmax) at
+       * init after flash load. Effective ceiling = MIN(live, latched), so the
+       * host cannot raise the cap at runtime — only set+save+reboot re-latches.
+       * FOC-only (defined in pwmgeneration-foc.cpp); the shared SINE build never
+       * references it. Declared unconditionally: an unreferenced declaration is
+       * harmless, and CONTROL is not guaranteed visible in this header. */
+      static void LatchManualCurrentCeiling();
 
    private:
       enum EdgeType { NoEdge, PosEdge, NegEdge };
