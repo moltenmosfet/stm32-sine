@@ -24,7 +24,7 @@
    2. Temporary parameters
    3. Display values
  */
-//Next param id (increase when adding new parameter!): 173 (172 = T21 iqtimeout, flag-gated; 167-171 reserved by B2-autotune; 173-199 reserved for T22 virtual-inertia; 200 = G8 manualiqmax, FOC-only)
+//Next param id (increase when adding new parameter!): 173 (172 = T21 iqtimeout, flag-gated; 167-171 reserved by B2-autotune; 173-199 reserved for T22 virtual-inertia; 200 = G8 manualiqmax, FOC-only; 201 = T25 potdiffmax)
 //Next value Id: 2058
 /*              category     name         unit       min     max     default id */
 
@@ -127,7 +127,8 @@
     PARAM_ENTRY(CAT_THROTTLE,potmode,     POTMODES,  0,      6,      0,      82  ) \
     PARAM_ENTRY(CAT_THROTTLE,potlinearity,"%",       0,      100,    100,    164 ) \
     PARAM_ENTRY(CAT_THROTTLE,throtramp,   "%/10ms",  0.1,    100,    100,    81  ) \
-    PARAM_ENTRY(CAT_THROTTLE,throtramprpm,"rpm",     0,      20000,  20000,  85  )
+    PARAM_ENTRY(CAT_THROTTLE,throtramprpm,"rpm",     0,      20000,  20000,  85  ) \
+    PARAM_ENTRY(CAT_THROTTLE,potdiffmax,  "%",       0,      100,    0,      201 )
 
 #define THROTTLE_PARAMETERS_SINE \
     PARAM_ENTRY(CAT_THROTTLE,ampmin,      "%",       0,      100,    10,     4   ) \

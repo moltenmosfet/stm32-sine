@@ -298,6 +298,105 @@ static void TestDualBothBad()
    ASSERT(errorMessage == ERR_THROTTLE2);
 }
 
+// ---------------------------------------------------------------------------
+// T25 [FORK]: dual-pot cross-channel plausibility fault (ruling 2026-07-23, b).
+// When POTMODE_DUALCHANNEL and BOTH channels are individually in range but
+// disagree by more than `potdiffmax` percentage points, the command stays the
+// MIN-select (unchanged) but a DEDICATED fault ERR_THROTTLEDIFF is raised
+// (distinct from the per-channel ERR_THROTTLE1/2 range faults) so a
+// stuck-but-in-range pot is never silent. potdiffmax == 0 disables the check
+// (shipped default),
+// making the default binary behaviourally a no-op. TestCaseSetup's LoadDefaults
+// resets potdiffmax to 0 before each case; cases that exercise the check enable
+// it explicitly. Both channels use the [0,4000] window so DigitsToPercent gives
+// percent == pot/40.
+// ---------------------------------------------------------------------------
+
+// Disagreement below tolerance: no fault, MIN-select unchanged.
+static void TestDualDisagreeBelowTol()
+{
+   SetupDualChannelPassthrough();
+   Throttle::potmin[0] = 0; Throttle::potmax[0] = 4000;
+   Throttle::potmin[1] = 0; Throttle::potmax[1] = 4000;
+   Param::SetFloat(Param::potdiffmax, 10);
+
+   RunDualChannel(2000, 1800); // ch1=50%, ch2=45%, diff=5 <= 10 -> plausible
+   ASSERT(ABS(Param::GetFloat(Param::potnom) - 45.0f) < 0.01f); // MIN unchanged
+   ASSERT(errorMessage == (ERROR_MESSAGE_NUM)-1);               // no fault posted
+}
+
+// Disagreement above tolerance: ERR_THROTTLEDIFF raised AND MIN still commanded.
+static void TestDualDisagreeAboveTol()
+{
+   SetupDualChannelPassthrough();
+   Throttle::potmin[0] = 0; Throttle::potmax[0] = 4000;
+   Throttle::potmin[1] = 0; Throttle::potmax[1] = 4000;
+   Param::SetFloat(Param::potdiffmax, 10);
+
+   RunDualChannel(2000, 800); // ch1=50%, ch2=20%, diff=30 > 10 -> implausible
+   ASSERT(ABS(Param::GetFloat(Param::potnom) - 20.0f) < 0.01f); // MIN-select KEPT
+   ASSERT(errorMessage == ERR_THROTTLEDIFF);                    // dedicated fault id
+}
+
+// Boundary: the comparison is strict (> tolerance), mirroring upstream's
+// diff > 10. A diff exactly equal to the tolerance is plausible; one count
+// tighter and the same readings trip.
+static void TestDualPlausBoundary()
+{
+   SetupDualChannelPassthrough();
+   Throttle::potmin[0] = 0; Throttle::potmax[0] = 4000;
+   Throttle::potmin[1] = 0; Throttle::potmax[1] = 4000;
+
+   // diff == tolerance -> plausible, no fault, MIN commanded.
+   Param::SetFloat(Param::potdiffmax, 10);
+   RunDualChannel(2000, 1600); // ch1=50%, ch2=40%, diff=10, tol=10
+   ASSERT(ABS(Param::GetFloat(Param::potnom) - 40.0f) < 0.01f);
+   ASSERT(errorMessage == (ERROR_MESSAGE_NUM)-1);
+
+   // Same readings, tolerance one count tighter -> diff (10) > tol (9) -> fault.
+   Param::SetFloat(Param::potdiffmax, 9);
+   RunDualChannel(2000, 1600);
+   ASSERT(ABS(Param::GetFloat(Param::potnom) - 40.0f) < 0.01f); // MIN still kept
+   ASSERT(errorMessage == ERR_THROTTLEDIFF);
+}
+
+// Disabled default (potdiffmax == 0): a large disagreement raises NO
+// plausibility fault and the MIN-select is bit-identical to pre-T25 behaviour.
+static void TestDualPlausDisabledDefault()
+{
+   SetupDualChannelPassthrough();
+   Throttle::potmin[0] = 0; Throttle::potmax[0] = 4000;
+   Throttle::potmin[1] = 0; Throttle::potmax[1] = 4000;
+   Param::SetFloat(Param::potdiffmax, 0); // explicit; also the LoadDefaults value
+
+   RunDualChannel(2000, 0); // ch1=50%, ch2=0%, diff=50 but check disabled
+   ASSERT(Param::GetFloat(Param::potnom) == 0);       // MIN-select unchanged
+   ASSERT(errorMessage == (ERROR_MESSAGE_NUM)-1);     // no plausibility fault
+}
+
+// Interaction with the per-channel range faults: the plausibility check lives
+// only inside the both-in-range branch, so a channel that is out of range
+// short-circuits to the existing range-fault path even with the check enabled.
+// The dedicated ERR_THROTTLEDIFF id is the whole point -- a range fault and a
+// plausibility fault must be DISTINGUISHABLE. Here ch2 is out of range with the
+// check ON: we get ERR_THROTTLE2 (the range fault), NOT ERR_THROTTLEDIFF.
+static void TestDualPlausRangeFaultInteraction()
+{
+   // The two fault classes are distinct error ids (dedicated id, not a reuse).
+   ASSERT(ERR_THROTTLEDIFF != ERR_THROTTLE1);
+   ASSERT(ERR_THROTTLEDIFF != ERR_THROTTLE2);
+
+   SetupDualChannelPassthrough();
+   Throttle::potmin[0] = 0; Throttle::potmax[0] = 4000; // ch1 in-range window
+   Throttle::potmin[1] = 0; Throttle::potmax[1] = 1000; // ch2 narrow window
+   Param::SetFloat(Param::potdiffmax, 10);              // check ON, must not fire
+
+   RunDualChannel(2000, 3000); // ch1=50%, ch2 out of range
+   ASSERT(ABS(Param::GetFloat(Param::potnom) - 50.0f) < 0.01f);
+   ASSERT(errorMessage == ERR_THROTTLE2);        // range fault ...
+   ASSERT(errorMessage != ERR_THROTTLEDIFF);     // ... distinguishable from plausibility
+}
+
 void VCUTest::TestCaseSetup()
 {
    VehicleControl::SetCan(new CanStub());
@@ -312,7 +411,9 @@ void VCUTest::TestCaseSetup()
 }
 
 REGISTER_TEST(VCUTest, CanTest1, CanTest2, CanTest3, TestCanSeqError1, TestCanSeqError2, TestCanBrakeLightHysteresis,
-              TestDualBothGoodMinSelect, TestDualCh1GoodCh2Bad, TestDualCh1BadCh2Good, TestDualBothBad);
+              TestDualBothGoodMinSelect, TestDualCh1GoodCh2Bad, TestDualCh1BadCh2Good, TestDualBothBad,
+              TestDualDisagreeBelowTol, TestDualDisagreeAboveTol, TestDualPlausBoundary,
+              TestDualPlausDisabledDefault, TestDualPlausRangeFaultInteraction);
 
 /* Stub functions */
 extern "C" void crc_reset()
