@@ -32,6 +32,7 @@
 #include "picontroller.h"
 #include "qclamp.h"
 #include "anticog.h"
+#include "manualclamp.h"
 
 #define FRQ_TO_ANGLE(frq) FP_TOINT((frq << SineCore::BITS) / pwmfrq)
 #define DIGIT_TO_DEGREE(a) FP_FROMINT(angle) / (65536 / 360)
@@ -50,6 +51,10 @@ static PiController excController;
 static QClamp qClamp;
 static s32fp fwCurMax = 0;
 static s32fp excCurMax = 0;
+/* G8 [FORK]: manualiqmax as latched at init after flash load. Init to the param
+ * default so that even before LatchManualCurrentCeiling() runs the effective
+ * ceiling is the 400 A no-op default, never 0. */
+static s32fp manualIqMaxLatch = FP_FROMINT(400);
 
 void PwmGeneration::Run()
 {
@@ -70,6 +75,17 @@ void PwmGeneration::Run()
 
       if (initwait == 0)
       {
+         /* G8 [FORK]: firmware authority cap on the CAN torque path. Clamp the
+          * manual current commands to +/- the effective ceiling ONCE here, then
+          * feed the clamped values into every summing junction below — no host
+          * bug can command past the configured ceiling (FMEA G8 / ABS-1 / RTL-2).
+          * Effective ceiling = MIN(live manualiqmax, value latched at boot), so
+          * the host can lower the cap live but cannot RAISE it without
+          * set+save+reboot (manualclamp.h boot-latch note). */
+         s32fp manualIqMax = EffectiveManualCeiling(Param::Get(Param::manualiqmax), manualIqMaxLatch);
+         s32fp manualIqCmd = ClampManualCurrent(Param::Get(Param::manualiq), manualIqMax);
+         s32fp manualIdCmd = ClampManualCurrent(Param::Get(Param::manualid), manualIqMax);
+
          int amplitudeErr = (FOC::GetMaximumModulationIndex() - Param::GetInt(Param::vlimmargin)) - Param::GetInt(Param::amp);
          amplitudeErr = MIN(fwOutMax, amplitudeErr);
          amplitudeErr = MAX(fwOutMax / 20, amplitudeErr);
@@ -84,9 +100,9 @@ void PwmGeneration::Run()
             s32fp exciterSpnt = (excCurMax * vlim) / fwOutMax;
             s32fp iexc = FP_DIV((AnaIn::udc.Get() - Param::GetInt(Param::udcofs)), Param::GetInt(Param::udcgain));
             Param::SetFixed(Param::ifw, iexc);
-            dController.SetRef(idMtpa + Param::Get(Param::manualid));
+            dController.SetRef(idMtpa + manualIdCmd);
             excController.SetRef(exciterSpnt);
-            qController.SetRef(iqMtpa + Param::Get(Param::manualiq));
+            qController.SetRef(iqMtpa + manualIqCmd);
             uint16_t pwm = excController.Run(iexc);
             Param::SetInt(Param::uexc, pwm);
             timer_set_oc_value(OVER_CUR_TIMER, TIM_OC4, pwm);
@@ -97,12 +113,12 @@ void PwmGeneration::Run()
             Param::SetFixed(Param::ifw, ifw);
 
             s32fp limitedIq = (vlim * iqMtpa) / fwOutMax;
-            qController.SetRef(limitedIq + Param::Get(Param::manualiq));
+            qController.SetRef(limitedIq + manualIqCmd);
 
             s32fp limitedId = -2 * ABS(limitedIq); //ratio between idMtpa and iqMtpa never > 2
             limitedId = MAX(idMtpa, limitedId);
             limitedId = MIN(ifw, limitedId);
-            dController.SetRef(limitedId + Param::Get(Param::manualid));
+            dController.SetRef(limitedId + manualIdCmd);
          }
       }
 
@@ -165,6 +181,14 @@ void PwmGeneration::Run()
       initwait = 0;
       AcHeat();
    }
+}
+
+void PwmGeneration::LatchManualCurrentCeiling()
+{
+   //G8 [FORK]: snapshot the flash-loaded manualiqmax. Called once from main()
+   //after parm_load(); the effective ceiling is MIN(live, this), so a runtime
+   //raise over CAN has no effect until set+save+reboot re-latches here.
+   manualIqMaxLatch = Param::Get(Param::manualiqmax);
 }
 
 void PwmGeneration::SetFwExcCurMax(float fwcur, float excur)
