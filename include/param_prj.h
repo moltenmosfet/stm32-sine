@@ -24,7 +24,7 @@
    2. Temporary parameters
    3. Display values
  */
-//Next param id (increase when adding new parameter!): 173 (172 = T21 iqtimeout, flag-gated; 167-171 reserved by B2-autotune; 173-199 reserved for T22 virtual-inertia; 200 = G8 manualiqmax, FOC-only; 201 = T25 potdiffmax)
+//Next param id (increase when adding new parameter!): 173 (172 = T21 iqtimeout, flag-gated; 167-171 reserved by B2-autotune; 173-199 reserved for T22 virtual-inertia; 200 = G8 manualiqmax, FOC-only; 201 = T25 potdiffmax; 202 = G8b throtcurmax, FOC-only)
 //Next value Id: 2058
 /*              category     name         unit       min     max     default id */
 
@@ -136,8 +136,30 @@
     PARAM_ENTRY(CAT_THROTTLE,sinecurve,   SINECURVES,0,      1,      0,      146 ) \
     PARAM_ENTRY(CAT_THROTTLE,throtfilter, "dig",     0,      10,     4,      147 )
 
+/* G8b [FORK]: firmware authority cap (magnitude) on the THROTTLE current path
+ * (FMEA G8 follow-up / ABS-1 / RTL-2). Applied to the stator current request
+ * `is = throtcur * torquePercent` before FOC::Mtpa, via include/throtclamp.h.
+ * Default 1000 A = the existing reachable full range (throtcur max 10 A/% x
+ * throttle magnitude 100%), so the shipped-default binary is behaviourally
+ * unchanged until configured down. FOC-only: `throtcur` only exists in this
+ * FOC throttle block and the SINE build's SetTorquePercent commands an
+ * amplitude/slip, not a current. id 202 follows G8's 200 and T25's 201 and
+ * still leaves 173-199 to T22's planned virtual-inertia coefficients (see
+ * FORK_NOTES G8b row).
+ *
+ * PARAM_ENTRY (TYPE_PARAM), NOT TESTP_ENTRY: the ceiling MUST survive a power
+ * cycle. param_save.cpp persists only TYPE_PARAM, so a TESTPARAM would reset to
+ * the 1000 default (= clamp off) at every boot until the host -- the component
+ * G8b distrusts -- rewrote it. A persisted PARAM_ENTRY, paired with the boot
+ * latch (throtclamp.h), makes the commissioned ceiling durable and the runtime
+ * channel raise-proof. Lives inside THROTTLE_PARAMETERS_FOC (already FOC-only,
+ * already the throttle's home) rather than a G8-style standalone macro; the
+ * block comment sits ABOVE the #define because it cannot live inside the
+ * backslash-continued macro body (it truncates the list). */
+/*              category     name         unit       min     max     default id */
 #define THROTTLE_PARAMETERS_FOC \
-   PARAM_ENTRY(CAT_THROTTLE,throtcur,    "A/%",       0,     10,     1,     105  )
+   PARAM_ENTRY(CAT_THROTTLE,throtcur,    "A/%",       0,     10,     1,     105  ) \
+   PARAM_ENTRY(CAT_THROTTLE,throtcurmax, "A",         0,     1000,   1000,  202  )
 
 #define REGEN_PARAMETERS \
     PARAM_ENTRY(CAT_REGEN,   brakeregen,  "%",       -100,   0,      -50,    38  ) \
