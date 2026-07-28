@@ -458,6 +458,12 @@ extern "C" int main(void)
    //before the latch and poison the whole session. Nothing between parm_load()
    //and here modifies manualiqmax. Do NOT move this after CAN construction.
    PwmGeneration::LatchManualCurrentCeiling();
+   //G8b [FORK]: same latch, same window, for the throttle current ceiling
+   //(throtcurmax, id 202). The ORDERING CONSTRAINT above applies verbatim: a
+   //flash-stored CAN RX map could target id 202 just as easily as id 200, so
+   //this must also stay ahead of the Stm32Can/CanMap/InverterSdo constructors.
+   //Nothing between parm_load() and here modifies throtcurmax.
+   PwmGeneration::LatchThrottleCurrentCeiling();
 #endif
    ErrorMessage::SetTime(1);
    Param::SetInt(Param::pwmio, pwmio_setup(Param::GetBool(Param::pwmpol)));

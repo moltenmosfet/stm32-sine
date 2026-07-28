@@ -49,6 +49,13 @@ class PwmGeneration
        * references it. Declared unconditionally: an unreferenced declaration is
        * harmless, and CONTROL is not guaranteed visible in this header. */
       static void LatchManualCurrentCeiling();
+      /* G8b [FORK]: same treatment for the throttle current authority ceiling
+       * (throtcurmax). Kept as its own entry point rather than folded into
+       * LatchManualCurrentCeiling() so G8's reviewed function keeps its exact
+       * meaning; both are called back-to-back from main() under one ordering
+       * constraint. FOC-only (defined in pwmgeneration-foc.cpp), declared
+       * unconditionally for the same reason as above. */
+      static void LatchThrottleCurrentCeiling();
 
    private:
       enum EdgeType { NoEdge, PosEdge, NegEdge };

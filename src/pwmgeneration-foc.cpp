@@ -33,6 +33,7 @@
 #include "qclamp.h"
 #include "anticog.h"
 #include "manualclamp.h"
+#include "throtclamp.h"
 
 #define FRQ_TO_ANGLE(frq) FP_TOINT((frq << SineCore::BITS) / pwmfrq)
 #define DIGIT_TO_DEGREE(a) FP_FROMINT(angle) / (65536 / 360)
@@ -55,6 +56,10 @@ static s32fp excCurMax = 0;
  * default so that even before LatchManualCurrentCeiling() runs the effective
  * ceiling is the 400 A no-op default, never 0. */
 static s32fp manualIqMaxLatch = FP_FROMINT(400);
+/* G8b [FORK]: throtcurmax as latched at init after flash load. Init to the param
+ * default so that even before LatchThrottleCurrentCeiling() runs the effective
+ * ceiling is the 1000 A no-op default, never 0. */
+static float throtCurMaxLatch = 1000.0f;
 
 void PwmGeneration::Run()
 {
@@ -191,6 +196,15 @@ void PwmGeneration::LatchManualCurrentCeiling()
    manualIqMaxLatch = Param::Get(Param::manualiqmax);
 }
 
+void PwmGeneration::LatchThrottleCurrentCeiling()
+{
+   //G8b [FORK]: snapshot the flash-loaded throtcurmax. Called once from main()
+   //after parm_load(), alongside LatchManualCurrentCeiling(); the effective
+   //ceiling is MIN(live, this), so a runtime raise over CAN has no effect until
+   //set+save+reboot re-latches here.
+   throtCurMaxLatch = Param::GetFloat(Param::throtcurmax);
+}
+
 void PwmGeneration::SetFwExcCurMax(float fwcur, float excur)
 {
    fwCurMax = FP_FROMFLT(fwcur);
@@ -200,6 +214,20 @@ void PwmGeneration::SetFwExcCurMax(float fwcur, float excur)
 void PwmGeneration::SetTorquePercent(float torquePercent)
 {
    float is = Param::GetFloat(Param::throtcur) * torquePercent;
+
+   /* G8b [FORK]: firmware authority cap on the THROTTLE current path — the
+    * scope G8 explicitly excluded. Clamp the stator current magnitude request
+    * here, BEFORE FOC::Mtpa splits it: Mtpa is magnitude-preserving
+    * (id^2 + iq^2 == is^2), so bounding |is| bounds the current that actually
+    * reaches the controllers, on both polarities (drive and regen alike). No
+    * host bug can command past the configured ceiling by writing `throtcur`.
+    * Effective ceiling = MIN(live throtcurmax, value latched at boot), so the
+    * host can lower the cap live but cannot RAISE it without set+save+reboot
+    * (throtclamp.h boot-latch note). Everything upstream — regen ramps, taper,
+    * derates — still shapes torquePercent exactly as before. */
+   is = ClampThrottleCurrent(is,
+           EffectiveThrottleCeiling(Param::GetFloat(Param::throtcurmax), throtCurMaxLatch));
+
    float id, iq;
 
    FOC::Mtpa(is, id, iq);
